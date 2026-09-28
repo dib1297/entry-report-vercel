@@ -357,6 +357,41 @@ export async function createSubmission(data: {
   return { success: true };
 }
 
+function parseSheetRowToItems(gpName: string, day: number, night: number, reject: number) {
+  const gpParts = (gpName || '').split('+').map(g => g.trim()).filter(Boolean);
+  const items: { gpName: string; shift: 'DAY' | 'NIGHT'; amount: number; problemAmount: number }[] = [];
+
+  if (gpParts.length === 0) {
+    items.push({ gpName: '', shift: day >= night ? 'DAY' : 'NIGHT', amount: day || night || 0, problemAmount: reject });
+    return items;
+  }
+
+  if (day > 0 && night > 0) {
+    items.push({ gpName: gpParts[0], shift: 'DAY', amount: day, problemAmount: reject });
+    items.push({ gpName: gpParts[1] || gpParts[0], shift: 'NIGHT', amount: night, problemAmount: 0 });
+    for (let k = 2; k < gpParts.length; k++) {
+      items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
+    }
+  } else if (day > 0) {
+    items.push({ gpName: gpParts[0], shift: 'DAY', amount: day, problemAmount: reject });
+    for (let k = 1; k < gpParts.length; k++) {
+      items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
+    }
+  } else if (night > 0) {
+    items.push({ gpName: gpParts[0], shift: 'NIGHT', amount: night, problemAmount: reject });
+    for (let k = 1; k < gpParts.length; k++) {
+      items.push({ gpName: gpParts[k], shift: 'NIGHT', amount: 0, problemAmount: 0 });
+    }
+  } else {
+    items.push({ gpName: gpParts[0], shift: 'DAY', amount: 0, problemAmount: reject });
+    for (let k = 1; k < gpParts.length; k++) {
+      items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
+    }
+  }
+
+  return items;
+}
+
 export async function updateSubmission(
   id: string,
   data: {
@@ -374,11 +409,41 @@ export async function updateSubmission(
 ) {
   try {
     const decoded = Buffer.from(id, 'base64url').toString('utf8');
-    const [originalRecType, rowIndexStr] = decoded.split('|');
-    const rowIndex = parseInt(rowIndexStr, 10);
-    const sheetTitle = originalRecType === 'ENTRY' ? 'Entry' : 'Verified';
+    const [originalRecType, rowIndexStr, originalDate, originalName] = decoded.split('|');
+    const originalRowIndex = parseInt(rowIndexStr, 10);
+    const originalSheetTitle = originalRecType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const formattedDate = toDDMMYYYY(data.date);
+    const rows = await getSheetValues(originalSheetTitle, 'A1:J');
+    let targetRowIdx = originalRowIndex;
+    const targetRow = rows[targetRowIdx - 1];
+    const matches = targetRow && 
+      toDDMMYYYY(targetRow[1]) === toDDMMYYYY(originalDate) && 
+      normalizeName(targetRow[2]) === normalizeName(originalName);
+
+    if (!matches) {
+      const foundIdx = rows.findIndex((r, idx) => {
+        if (idx < 2) return false;
+        return toDDMMYYYY(r[1]) === toDDMMYYYY(originalDate) && normalizeName(r[2]) === normalizeName(originalName);
+      });
+      if (foundIdx !== -1) {
+        targetRowIdx = foundIdx + 1;
+      }
+    }
+
+    const targetRecType = data.recordType as 'ENTRY' | 'VERIFY';
+    const newFormattedDate = toDDMMYYYY(data.date);
+    const oldFormattedDate = toDDMMYYYY(originalDate);
+
+    // If record moved to a different sheet or different date section
+    if (targetRecType !== originalRecType || newFormattedDate !== oldFormattedDate) {
+      await deleteSheetRow(originalSheetTitle, targetRowIdx);
+      const res = await createSubmission(data);
+      safeRevalidate();
+      return res;
+    }
+
+    // In-place update within same date section and same sheet
+    const formattedDate = newFormattedDate;
     const dioName = normalizeName(data.name);
     const mobile = data.mobile ? data.mobile.trim() : '';
 
@@ -394,7 +459,7 @@ export async function updateSubmission(
     const rejectAmount = data.items.reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
     const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
 
-    const currentRows = await getSheetValues(sheetTitle, `A${rowIndex}:J${rowIndex}`);
+    const currentRows = await getSheetValues(originalSheetTitle, `A${targetRowIdx}:J${targetRowIdx}`);
     const slNo = currentRows[0]?.[0] || 1;
 
     const updatedRow = [
@@ -410,10 +475,10 @@ export async function updateSubmission(
       ''
     ];
 
-    await updateSheetRow(sheetTitle, rowIndex, updatedRow);
+    await updateSheetRow(originalSheetTitle, targetRowIdx, updatedRow);
     try {
-      await adjustGpCellFontSize(sheetTitle, rowIndex, gpNames);
-      await formatDataRow(sheetTitle, rowIndex);
+      await adjustGpCellFontSize(originalSheetTitle, targetRowIdx, gpNames);
+      await formatDataRow(originalSheetTitle, targetRowIdx);
     } catch (_) {}
 
     safeRevalidate();
@@ -426,12 +491,28 @@ export async function updateSubmission(
 export async function deleteSubmission(id: string) {
   try {
     const decoded = Buffer.from(id, 'base64url').toString('utf8');
-    const [recType, rowIndexStr] = decoded.split('|');
-    const rowIndex = parseInt(rowIndexStr, 10);
+    const [recType, rowIndexStr, date, name] = decoded.split('|');
+    let rowIndex = parseInt(rowIndexStr, 10);
     const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    await deleteSheetRow(sheetTitle, rowIndex);
+    const rows = await getSheetValues(sheetTitle, 'A1:J');
+    let targetRowIdx = rowIndex;
+    const targetRow = rows[targetRowIdx - 1];
+    const matches = targetRow && 
+      toDDMMYYYY(targetRow[1]) === toDDMMYYYY(date) && 
+      normalizeName(targetRow[2]) === normalizeName(name);
 
+    if (!matches) {
+      const foundIdx = rows.findIndex((r, idx) => {
+        if (idx < 2) return false;
+        return toDDMMYYYY(r[1]) === toDDMMYYYY(date) && normalizeName(r[2]) === normalizeName(name);
+      });
+      if (foundIdx !== -1) {
+        targetRowIdx = foundIdx + 1;
+      }
+    }
+
+    await deleteSheetRow(sheetTitle, targetRowIdx);
     safeRevalidate();
     return { success: true };
   } catch (err: any) {
@@ -440,8 +521,6 @@ export async function deleteSubmission(id: string) {
 }
 
 export async function getSubmissions(query?: { name?: string; date?: string; recordType?: string }) {
-  if (!query || Object.keys(query).length === 0) return [];
-
   const titlesToFetch: ('Entry' | 'Verified')[] = [];
   if (!query?.recordType || query.recordType === 'All' || query.recordType === 'ENTRY') {
     titlesToFetch.push('Entry');
@@ -451,8 +530,8 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
   }
 
   const results: any[] = [];
-  const queryName = query.name ? query.name.trim().toLowerCase() : '';
-  const queryDate = query.date ? toDDMMYYYY(query.date.trim()) : '';
+  const queryName = query?.name ? query.name.trim().toLowerCase() : '';
+  const queryDate = query?.date ? toDDMMYYYY(query.date.trim()) : '';
 
   for (const sheetTitle of titlesToFetch) {
     const rows = await getSheetValues(sheetTitle, 'A1:J');
@@ -461,7 +540,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
     rows.forEach((r, idx) => {
       const rowIndex = idx + 1;
       if (!r || r.length < 2) return;
-      if (r[0] === 'SL NO.' || r[1] === 'DATE' || r[0]?.includes('M M S B Y')) return;
+      if (r[0] === 'SL NO.' || r[1] === 'DATE' || r[2] === 'DIO NAME' || r[0]?.includes('M M S B Y')) return;
 
       const slNo = parseInt(r[0], 10) || 0;
       const date = r[1]?.trim() || '';
@@ -473,31 +552,15 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
       const reject = Number(r[7]) || 0;
       const mobile = r[8]?.trim() || '';
 
+      if (!date || !name) return;
+
       if (queryName && !name.toLowerCase().includes(queryName)) return;
       if (queryDate && date !== queryDate) return;
-      if (query.recordType && query.recordType !== 'All' && query.recordType !== recType) return;
+      if (query?.recordType && query.recordType !== 'All' && query.recordType !== recType) return;
 
       const uiId = Buffer.from(`${recType}|${rowIndex}|${date}|${name}`).toString('base64url');
-
-      const gpParts = gpName.split('+').map(g => g.trim()).filter(Boolean);
-      const items: any[] = [];
-      if (gpParts.length > 0) {
-        if (day > 0 || (day === 0 && night === 0)) {
-          items.push({ gpName: gpParts[0], shift: 'DAY', amount: day, problemAmount: reject });
-        }
-        if (night > 0) {
-          items.push({ gpName: gpParts[gpParts.length > 1 ? 1 : 0], shift: 'NIGHT', amount: night, problemAmount: 0 });
-        }
-        for (let k = 2; k < gpParts.length; k++) {
-          items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
-        }
-      } else {
-        items.push({ gpName: '', shift: 'DAY', amount: day, problemAmount: reject });
-      }
-
+      const items = parseSheetRowToItems(gpName, day, night, reject);
       const now = new Date();
-      const todayFormatted = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-      const isToday = date === todayFormatted;
 
       results.push({
         id: uiId,
@@ -514,25 +577,50 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
         reject,
         recordType: recType,
         items,
-        isEditable: isToday,
-        editUntil: new Date(now.getTime() + 30 * 60 * 1000)
+        createdAt: now,
+        isEditable: true,
+        editUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
       });
     });
   }
 
-  return results.reverse();
+  const parseDateKey = (dStr: string) => {
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dStr;
+  };
+
+  return results.sort((a, b) => parseDateKey(b.displayDate).localeCompare(parseDateKey(a.displayDate)));
 }
 
 export async function getSubmission(id: string) {
   try {
     const decoded = Buffer.from(id, 'base64url').toString('utf8');
     const [recType, rowIndexStr, date, name] = decoded.split('|');
-    const rowIndex = parseInt(rowIndexStr, 10);
+    let rowIndex = parseInt(rowIndexStr, 10);
     const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const rows = await getSheetValues(sheetTitle, `A${rowIndex}:J${rowIndex}`);
-    if (!rows || rows.length === 0) return null;
-    const r = rows[0];
+    const rows = await getSheetValues(sheetTitle, 'A1:J');
+    let targetRowIdx = rowIndex;
+    let r = rows[targetRowIdx - 1];
+    const matches = r && 
+      toDDMMYYYY(r[1]) === toDDMMYYYY(date) && 
+      normalizeName(r[2]) === normalizeName(name);
+
+    if (!matches) {
+      const foundIdx = rows.findIndex((row, idx) => {
+        if (idx < 2) return false;
+        return toDDMMYYYY(row[1]) === toDDMMYYYY(date) && normalizeName(row[2]) === normalizeName(name);
+      });
+      if (foundIdx !== -1) {
+        targetRowIdx = foundIdx + 1;
+        r = rows[foundIdx];
+      }
+    }
+
+    if (!r || r.length < 2) return null;
 
     const slNo = parseInt(r[0], 10) || 0;
     const rowDate = r[1]?.trim() || '';
@@ -544,22 +632,12 @@ export async function getSubmission(id: string) {
     const reject = Number(r[7]) || 0;
     const mobile = r[8]?.trim() || '';
 
-    const gpParts = gpName.split('+').map(g => g.trim()).filter(Boolean);
-    const items: any[] = [];
-    if (day > 0 || (day === 0 && night === 0)) {
-      items.push({ gpName: gpParts[0] || '', shift: 'DAY', amount: day, problemAmount: reject });
-    }
-    if (night > 0) {
-      items.push({ gpName: gpParts[gpParts.length > 1 ? 1 : 0] || '', shift: 'NIGHT', amount: night, problemAmount: 0 });
-    }
-    for (let k = 2; k < gpParts.length; k++) {
-      items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
-    }
-
+    const items = parseSheetRowToItems(gpName, day, night, reject);
     const now = new Date();
+
     return {
       id,
-      rowIndex,
+      rowIndex: targetRowIdx,
       slNo,
       date: toYYYYMMDD(rowDate),
       displayDate: rowDate,
@@ -572,7 +650,8 @@ export async function getSubmission(id: string) {
       reject,
       recordType: recType as 'ENTRY' | 'VERIFY',
       items,
-      editUntil: new Date(now.getTime() + 30 * 60 * 1000)
+      createdAt: now,
+      editUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
     };
   } catch (e) {
     return null;

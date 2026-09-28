@@ -27,7 +27,7 @@ const GP_LIST = [
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
   name: z.string().min(1, 'DIO Name is required').trim(),
-  mobile: z.string().min(10, 'Enter valid 10-digit mobile number').regex(/^[0-9]{10}$/, 'Must be a 10-digit mobile number'),
+  mobile: z.string().optional().refine(val => !val || /^[0-9]{10}$/.test(val), { message: 'Must be a valid 10-digit mobile number' }),
   recordType: z.enum(['ENTRY', 'VERIFY']),
   items: z.array(z.object({
     gpName: z.string().min(1, 'GP is required'),
@@ -103,8 +103,7 @@ export default function SubmissionForm({
           : await createSubmission(previewData);
           
         if (res.success) {
-          // Redirect to home page with success indicator
-          router.push('/?success=1');
+          router.push(isEditing ? '/old?updated=1' : '/?success=1');
           router.refresh();
         } else if ('error' in res) {
           setErrorMsg((res as any).error || 'Failed to submit data');
