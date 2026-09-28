@@ -2,47 +2,42 @@
 
 import { normalizeName } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
-import { getGoogleDoc } from '@/lib/google-sheets';
+import { 
+  getSheetValues, 
+  appendSheetRows, 
+  updateSheetRow, 
+  deleteSheetRow 
+} from '@/lib/google-sheets';
 
-export type RecordRow = {
-  Date: string;
-  Name: string;
-  Mobile?: string;
-  'GP (entry or verify)': string;
-  Day: number;
-  Night: number;
-  Total: number;
-  Reject: number;
-  'Submitted At': string;
-  'Last Update': string;
-  'Record Type': 'ENTRY' | 'VERIFY';
-};
+const HEADER_ROW = [
+  "SL NO.",
+  "DATE",
+  "DIO NAME",
+  "GP NAME",
+  "DAY",
+  "NIGHT",
+  "TOTAL (UPLOADING)",
+  "REJECT",
+  "MOBILE",
+  "WORK F HOME"
+];
 
-// Helper to synthesize a unique URL-safe ID for UI group
-function generateUIId(date: string, name: string, recordType: string) {
-  return Buffer.from(`${date}|${name}|${recordType}`).toString('base64url');
+function toDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.trim().split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
 }
 
-// Helper to get or create sheet based on type
-async function getSheetForType(doc: any, type: 'ENTRY' | 'VERIFY') {
-  if (type === 'ENTRY') {
-    const sheet = doc.sheetsByIndex[0];
-    try {
-      await sheet.setHeaderRow(['Date', 'Name', 'Mobile', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
-    } catch (e) {}
-    return sheet;
-  } else {
-    let sheet = doc.sheetsByTitle['Verify'];
-    if (!sheet) {
-      sheet = await doc.addSheet({ title: 'Verify' });
-      await sheet.setHeaderRow(['Date', 'Name', 'Mobile', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
-    } else {
-      try {
-        await sheet.setHeaderRow(['Date', 'Name', 'Mobile', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
-      } catch (e) {}
-    }
-    return sheet;
+function toYYYYMMDD(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.trim().split('-');
+  if (parts.length === 3 && parts[2].length === 4) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
+  return dateStr;
 }
 
 export async function createSubmission(data: {
@@ -57,59 +52,91 @@ export async function createSubmission(data: {
     problemAmount: number;
   }[];
 }) {
-  const normalizedName = normalizeName(data.name);
-  const type = data.recordType as 'ENTRY' | 'VERIFY';
-  
-  const doc = await getGoogleDoc();
-  const sheet = await getSheetForType(doc, type);
+  const sheetTitle = data.recordType === 'ENTRY' ? 'Entry' : 'Verified';
+  const formattedDate = toDDMMYYYY(data.date);
+  const dioName = normalizeName(data.name);
+  const mobile = data.mobile ? data.mobile.trim() : '';
 
-  const rows = await sheet.getRows();
-  const nowString = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  // 1. Calculate Day & Night totals
+  const dayAmount = data.items
+    .filter(item => item.shift === 'DAY')
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  for (const item of data.items) {
-    const existingRow = rows.find((r: any) => 
-      r.get('Date') === data.date && 
-      r.get('Name') === normalizedName && 
-      r.get('GP (entry or verify)') === item.gpName && 
-      r.get('Record Type') === type
-    );
+  const nightAmount = data.items
+    .filter(item => item.shift === 'NIGHT')
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-    if (existingRow) {
-      let updatedDay = Number(existingRow.get('Day')) || 0;
-      let updatedNight = Number(existingRow.get('Night')) || 0;
-      let existingProblem = Number(existingRow.get('Reject')) || 0;
-      
-      if (item.shift === 'DAY') updatedDay += item.amount;
-      else updatedNight += item.amount;
-      
-      const updatedTotal = updatedDay + updatedNight;
+  const totalAmount = dayAmount + nightAmount;
 
-      existingRow.assign({
-        Day: updatedDay,
-        Night: updatedNight,
-        Reject: existingProblem + item.problemAmount,
-        Total: updatedTotal,
-        'Last Update': nowString
-      });
-      await existingRow.save();
-    } else {
-      await sheet.addRow({
-        Date: data.date,
-        Name: normalizedName,
-        Mobile: data.mobile || '',
-        'GP (entry or verify)': item.gpName,
-        Day: item.shift === 'DAY' ? item.amount : 0,
-        Night: item.shift === 'NIGHT' ? item.amount : 0,
-        Total: item.amount,
-        Reject: item.problemAmount,
-        'Submitted At': nowString,
-        'Last Update': nowString,
-        'Record Type': type,
-      });
+  const rejectAmount = data.items
+    .reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
+
+  // 2. Combine GP names with '+' (e.g. SAHEBGANJ+BARASAKDAL)
+  const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
+
+  // 3. Fetch existing rows from the target sheet
+  const rows = await getSheetValues(sheetTitle, 'A1:J');
+
+  // 4. Scan backwards to find the last data row and calculate SL NO.
+  let lastDataRow: string[] | null = null;
+  let lastDataDate = '';
+  let lastSlNoForDate = 0;
+
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
+      if (!lastDataRow) {
+        lastDataRow = r;
+        lastDataDate = r[1]?.trim() || '';
+      }
+      if (r[1]?.trim() === formattedDate) {
+        const sl = parseInt(r[0], 10);
+        if (!isNaN(sl) && sl > lastSlNoForDate) {
+          lastSlNoForDate = sl;
+        }
+      }
     }
   }
 
+  const rowsToAppend: any[][] = [];
+
+  // 5. Date change logic:
+  // If there are existing data rows and date changed, insert HEADER_ROW and start SL NO. at 1
+  if (lastDataRow && lastDataDate !== formattedDate) {
+    rowsToAppend.push(HEADER_ROW);
+    rowsToAppend.push([
+      1,
+      formattedDate,
+      dioName,
+      gpNames,
+      dayAmount,
+      nightAmount,
+      totalAmount,
+      rejectAmount,
+      mobile,
+      ''
+    ]);
+  } else {
+    // Same date or first entry in sheet
+    const nextSlNo = lastSlNoForDate + 1;
+    rowsToAppend.push([
+      nextSlNo,
+      formattedDate,
+      dioName,
+      gpNames,
+      dayAmount,
+      nightAmount,
+      totalAmount,
+      rejectAmount,
+      mobile,
+      ''
+    ]);
+  }
+
+  await appendSheetRows(sheetTitle, rowsToAppend);
+
   revalidatePath('/old');
+  revalidatePath('/');
   return { success: true };
 }
 
@@ -128,181 +155,206 @@ export async function updateSubmission(
     }[];
   }
 ) {
-  const type = data.recordType as 'ENTRY' | 'VERIFY';
-  const decoded = Buffer.from(id, 'base64url').toString('utf8');
-  const [originalDate, originalName, originalRecordType] = decoded.split('|');
+  try {
+    const decoded = Buffer.from(id, 'base64url').toString('utf8');
+    const [originalRecType, rowIndexStr] = decoded.split('|');
+    const rowIndex = parseInt(rowIndexStr, 10);
+    const sheetTitle = originalRecType === 'ENTRY' ? 'Entry' : 'Verified';
 
-  if (!originalDate || !originalName || originalRecordType !== type) {
-    return { success: false, error: 'Invalid ID' };
+    const formattedDate = toDDMMYYYY(data.date);
+    const dioName = normalizeName(data.name);
+    const mobile = data.mobile ? data.mobile.trim() : '';
+
+    const dayAmount = data.items
+      .filter(item => item.shift === 'DAY')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    const nightAmount = data.items
+      .filter(item => item.shift === 'NIGHT')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    const totalAmount = dayAmount + nightAmount;
+    const rejectAmount = data.items.reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
+    const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
+
+    const currentRows = await getSheetValues(sheetTitle, `A${rowIndex}:J${rowIndex}`);
+    const slNo = currentRows[0]?.[0] || 1;
+
+    const updatedRow = [
+      slNo,
+      formattedDate,
+      dioName,
+      gpNames,
+      dayAmount,
+      nightAmount,
+      totalAmount,
+      rejectAmount,
+      mobile,
+      ''
+    ];
+
+    await updateSheetRow(sheetTitle, rowIndex, updatedRow);
+
+    revalidatePath('/old');
+    revalidatePath('/');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update record' };
   }
-
-  const doc = await getGoogleDoc();
-  const sheet = await getSheetForType(doc, type);
-  const rows = await sheet.getRows();
-
-  const existingRows = rows.filter((r: any) => 
-    r.get('Date') === originalDate && 
-    r.get('Name') === originalName && 
-    r.get('Record Type') === type
-  );
-
-  if (existingRows.length === 0) return { success: false, error: 'Submission not found' };
-
-  const submittedAtDate = new Date(existingRows[0].get('Submitted At'));
-  if (!isNaN(submittedAtDate.getTime())) {
-    const editUntil = new Date(submittedAtDate.getTime() + 30 * 60 * 1000);
-    if (new Date() > editUntil) return { success: false, error: 'Edit Time Expired' };
-  }
-
-  const normalizedName = normalizeName(data.name);
-  const nowString = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-  const originalSubmittedAt = existingRows[0].get('Submitted At');
-
-  // Delete old rows
-  for (const row of existingRows) {
-    await row.delete();
-  }
-
-  // Insert new rows
-  const mergedMap = new Map<string, any>();
-  for (const item of data.items) {
-    const key = `${data.date}_${normalizedName}_${item.gpName}`;
-    if (!mergedMap.has(key)) {
-      mergedMap.set(key, {
-        Date: data.date,
-        Name: normalizedName,
-        Mobile: data.mobile || '',
-        'GP (entry or verify)': item.gpName,
-        Day: 0,
-        Night: 0,
-        Total: 0,
-        Reject: 0,
-        'Submitted At': originalSubmittedAt,
-        'Last Update': nowString,
-        'Record Type': type
-      });
-    }
-    const merged = mergedMap.get(key)!;
-    if (item.shift === 'DAY') merged.Day = item.amount;
-    if (item.shift === 'NIGHT') merged.Night = item.amount;
-    merged.Reject = item.problemAmount;
-    merged.Total = merged.Day + merged.Night;
-  }
-
-  const newRows = Array.from(mergedMap.values());
-  if (newRows.length > 0) {
-    await sheet.addRows(newRows);
-  }
-
-  revalidatePath('/old');
-  return { success: true };
-}
-
-export async function getSubmissions(query?: { name?: string; date?: string; recordType?: string }) {
-  const doc = await getGoogleDoc();
-  let allRows: any[] = [];
-  
-  if (!query?.recordType || query.recordType === 'All' || query.recordType === 'ENTRY') {
-    const entrySheet = doc.sheetsByIndex[0];
-    if (entrySheet) allRows.push(...await entrySheet.getRows());
-  }
-  if (!query?.recordType || query.recordType === 'All' || query.recordType === 'VERIFY') {
-    const verifySheet = doc.sheetsByTitle['Verify'];
-    if (verifySheet) allRows.push(...await verifySheet.getRows());
-  }
-
-  let filteredRows = allRows;
-
-  if (query?.name?.trim()) {
-    const regex = new RegExp(query.name.trim(), 'i');
-    filteredRows = filteredRows.filter((r: any) => regex.test(r.get('Name')));
-  }
-  if (query?.date?.trim()) {
-    filteredRows = filteredRows.filter((r: any) => r.get('Date') === query.date?.trim());
-  }
-  if (query?.recordType && query.recordType !== 'All') {
-    filteredRows = filteredRows.filter((r: any) => r.get('Record Type') === query.recordType);
-  }
-
-  // If no query parameters are provided (and it's not a generic fetch), we might want to return empty.
-  // But wait, the original returned empty if NO query parameters were provided.
-  if (!query || Object.keys(query).length === 0) return [];
-
-  const grouped = new Map<string, any>();
-  for (const row of filteredRows) {
-    const date = row.get('Date');
-    const name = row.get('Name');
-    const recordType = row.get('Record Type');
-    const uiId = generateUIId(date, name, recordType);
-    
-    if (!grouped.has(uiId)) {
-      let submittedDate = new Date(row.get('Submitted At'));
-      if (isNaN(submittedDate.getTime())) submittedDate = new Date();
-      
-      grouped.set(uiId, {
-        id: uiId,
-        date: date,
-        name: name,
-        mobile: row.get('Mobile') || '',
-        recordType: recordType,
-        createdAt: submittedDate,
-        editUntil: new Date(submittedDate.getTime() + 30 * 60 * 1000),
-        items: []
-      });
-    }
-    
-    const sub = grouped.get(uiId);
-    const day = Number(row.get('Day')) || 0;
-    const night = Number(row.get('Night')) || 0;
-    const problem = Number(row.get('Reject')) || 0;
-    const gp = row.get('GP (entry or verify)');
-
-    if (day > 0 || (day === 0 && night === 0)) {
-      sub.items.push({ gpName: gp, shift: 'DAY', amount: day, problemAmount: problem });
-    }
-    if (night > 0) {
-      sub.items.push({ gpName: gp, shift: 'NIGHT', amount: night, problemAmount: 0 });
-    }
-  }
-
-  return Array.from(grouped.values()).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function deleteSubmission(id: string) {
   try {
     const decoded = Buffer.from(id, 'base64url').toString('utf8');
-    const [date, name, recordType] = decoded.split('|');
-    if (!date || !name || !recordType) return { success: false, error: 'Invalid ID' };
+    const [recType, rowIndexStr] = decoded.split('|');
+    const rowIndex = parseInt(rowIndexStr, 10);
+    const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const doc = await getGoogleDoc();
-    const sheet = await getSheetForType(doc, recordType as 'ENTRY' | 'VERIFY');
-    const rows = await sheet.getRows();
-    
-    const rowsToDelete = rows.filter((r: any) => 
-      r.get('Date') === date && 
-      r.get('Name') === name && 
-      r.get('Record Type') === recordType
-    );
-
-    for (const row of rowsToDelete) {
-      await row.delete();
-    }
+    await deleteSheetRow(sheetTitle, rowIndex);
 
     revalidatePath('/old');
+    revalidatePath('/');
     return { success: true };
-  } catch (error) {
-    return { success: false, error: 'Failed to delete submission' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to delete record' };
   }
+}
+
+export async function getSubmissions(query?: { name?: string; date?: string; recordType?: string }) {
+  if (!query || Object.keys(query).length === 0) return [];
+
+  const titlesToFetch: ('Entry' | 'Verified')[] = [];
+  if (!query?.recordType || query.recordType === 'All' || query.recordType === 'ENTRY') {
+    titlesToFetch.push('Entry');
+  }
+  if (!query?.recordType || query.recordType === 'All' || query.recordType === 'VERIFY') {
+    titlesToFetch.push('Verified');
+  }
+
+  const results: any[] = [];
+  const queryName = query.name ? query.name.trim().toLowerCase() : '';
+  const queryDate = query.date ? toDDMMYYYY(query.date.trim()) : '';
+
+  for (const sheetTitle of titlesToFetch) {
+    const rows = await getSheetValues(sheetTitle, 'A1:J');
+    const recType = sheetTitle === 'Entry' ? 'ENTRY' : 'VERIFY';
+
+    rows.forEach((r, idx) => {
+      const rowIndex = idx + 1;
+      if (!r || r.length < 2) return;
+      if (r[0] === 'SL NO.' || r[1] === 'DATE' || r[0]?.includes('M M S B Y')) return;
+
+      const slNo = parseInt(r[0], 10) || 0;
+      const date = r[1]?.trim() || '';
+      const name = r[2]?.trim() || '';
+      const gpName = r[3]?.trim() || '';
+      const day = Number(r[4]) || 0;
+      const night = Number(r[5]) || 0;
+      const total = Number(r[6]) || 0;
+      const reject = Number(r[7]) || 0;
+      const mobile = r[8]?.trim() || '';
+
+      if (queryName && !name.toLowerCase().includes(queryName)) return;
+      if (queryDate && date !== queryDate) return;
+      if (query.recordType && query.recordType !== 'All' && query.recordType !== recType) return;
+
+      const uiId = Buffer.from(`${recType}|${rowIndex}|${date}|${name}`).toString('base64url');
+
+      const gpParts = gpName.split('+').map(g => g.trim()).filter(Boolean);
+      const items: any[] = [];
+      if (gpParts.length > 0) {
+        if (day > 0 || (day === 0 && night === 0)) {
+          items.push({ gpName: gpParts[0], shift: 'DAY', amount: day, problemAmount: reject });
+        }
+        if (night > 0) {
+          items.push({ gpName: gpParts[gpParts.length > 1 ? 1 : 0], shift: 'NIGHT', amount: night, problemAmount: 0 });
+        }
+        for (let k = 2; k < gpParts.length; k++) {
+          items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
+        }
+      } else {
+        items.push({ gpName: '', shift: 'DAY', amount: day, problemAmount: reject });
+      }
+
+      const now = new Date();
+      const todayFormatted = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+      const isToday = date === todayFormatted;
+
+      results.push({
+        id: uiId,
+        rowIndex,
+        slNo,
+        date: toYYYYMMDD(date),
+        displayDate: date,
+        name,
+        mobile,
+        gpName,
+        day,
+        night,
+        total,
+        reject,
+        recordType: recType,
+        items,
+        isEditable: isToday,
+        editUntil: new Date(now.getTime() + 30 * 60 * 1000)
+      });
+    });
+  }
+
+  return results.reverse();
 }
 
 export async function getSubmission(id: string) {
   try {
     const decoded = Buffer.from(id, 'base64url').toString('utf8');
-    const [date, name, recordType] = decoded.split('|');
-    if (!date || !name || !recordType) return null;
-    
-    const submissions = await getSubmissions({ name, date, recordType });
-    return submissions.find(s => s.id === id) || null;
+    const [recType, rowIndexStr, date, name] = decoded.split('|');
+    const rowIndex = parseInt(rowIndexStr, 10);
+    const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
+
+    const rows = await getSheetValues(sheetTitle, `A${rowIndex}:J${rowIndex}`);
+    if (!rows || rows.length === 0) return null;
+    const r = rows[0];
+
+    const slNo = parseInt(r[0], 10) || 0;
+    const rowDate = r[1]?.trim() || '';
+    const rowName = r[2]?.trim() || '';
+    const gpName = r[3]?.trim() || '';
+    const day = Number(r[4]) || 0;
+    const night = Number(r[5]) || 0;
+    const total = Number(r[6]) || 0;
+    const reject = Number(r[7]) || 0;
+    const mobile = r[8]?.trim() || '';
+
+    const gpParts = gpName.split('+').map(g => g.trim()).filter(Boolean);
+    const items: any[] = [];
+    if (day > 0 || (day === 0 && night === 0)) {
+      items.push({ gpName: gpParts[0] || '', shift: 'DAY', amount: day, problemAmount: reject });
+    }
+    if (night > 0) {
+      items.push({ gpName: gpParts[gpParts.length > 1 ? 1 : 0] || '', shift: 'NIGHT', amount: night, problemAmount: 0 });
+    }
+    for (let k = 2; k < gpParts.length; k++) {
+      items.push({ gpName: gpParts[k], shift: 'DAY', amount: 0, problemAmount: 0 });
+    }
+
+    const now = new Date();
+    return {
+      id,
+      rowIndex,
+      slNo,
+      date: toYYYYMMDD(rowDate),
+      displayDate: rowDate,
+      name: rowName,
+      mobile,
+      gpName,
+      day,
+      night,
+      total,
+      reject,
+      recordType: recType as 'ENTRY' | 'VERIFY',
+      items,
+      editUntil: new Date(now.getTime() + 30 * 60 * 1000)
+    };
   } catch (e) {
     return null;
   }
