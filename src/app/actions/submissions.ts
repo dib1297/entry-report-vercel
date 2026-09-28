@@ -22,22 +22,41 @@ const HEADER_ROW = [
   "WORK F HOME"
 ];
 
+function safeRevalidate() {
+  try {
+    revalidatePath('/old');
+    revalidatePath('/');
+  } catch (_) {
+    // Intentionally ignored when invoked outside Next.js request context (e.g. testing/scripts)
+  }
+}
+
 function toDDMMYYYY(dateStr: string): string {
   if (!dateStr) return '';
-  const parts = dateStr.trim().split('-');
-  if (parts.length === 3 && parts[0].length === 4) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  const clean = dateStr.trim().replace(/\//g, '-');
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
+    } else if (parts[2].length === 4) {
+      return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
+    }
   }
-  return dateStr;
+  return clean;
 }
 
 function toYYYYMMDD(dateStr: string): string {
   if (!dateStr) return '';
-  const parts = dateStr.trim().split('-');
-  if (parts.length === 3 && parts[2].length === 4) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  const clean = dateStr.trim().replace(/\//g, '-');
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    if (parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
   }
-  return dateStr;
+  return clean;
 }
 
 export async function createSubmission(data: {
@@ -71,13 +90,79 @@ export async function createSubmission(data: {
   const rejectAmount = data.items
     .reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
 
-  // 2. Combine GP names with '+' (e.g. SAHEBGANJ+BARASAKDAL)
-  const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
-
-  // 3. Fetch existing rows from the target sheet
+  // 2. Fetch existing rows from the target sheet
   const rows = await getSheetValues(sheetTitle, 'A1:J');
 
-  // 4. Scan backwards to find the last data row and calculate SL NO.
+  // 3. Check if DIO already has a row on the SAME DATE in this sheet
+  // Rule: A DIO name cannot appear twice on the same date; GP names merge with '+' and amounts add up
+  let existingRowIndex = -1;
+  let existingRow: string[] | null = null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
+      const rowDate = toDDMMYYYY(r[1] || '');
+      const rowDioName = (r[2] || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const searchDioName = dioName.toLowerCase().replace(/\s+/g, ' ');
+
+      if (rowDate === formattedDate && rowDioName === searchDioName) {
+        existingRowIndex = i + 1; // Google Sheets row number (1-indexed)
+        existingRow = r;
+        break;
+      }
+    }
+  }
+
+  // 4. If existing row on same date is found, update in-place without adding duplicate row
+  if (existingRow && existingRowIndex > 0) {
+    const existingSlNo = existingRow[0] || '1';
+    const existingGpRaw = existingRow[3] || '';
+    const existingGps = existingGpRaw.split('+').map(g => g.trim()).filter(Boolean);
+    const newGps = data.items.map(item => item.gpName?.trim()).filter(Boolean);
+
+    // Merge GP names: combine distinct GPs preserving order
+    const mergedGps: string[] = [...existingGps];
+    for (const gp of newGps) {
+      if (!mergedGps.some(existing => existing.toLowerCase() === gp.toLowerCase())) {
+        mergedGps.push(gp);
+      }
+    }
+    const finalGpNames = mergedGps.join('+');
+
+    const existingDay = Number(existingRow[4]) || 0;
+    const existingNight = Number(existingRow[5]) || 0;
+    const existingReject = Number(existingRow[7]) || 0;
+    const existingMobile = existingRow[8]?.trim() || '';
+    const existingWorkFHome = existingRow[9] || '';
+
+    const updatedDay = existingDay + dayAmount;
+    const updatedNight = existingNight + nightAmount;
+    const updatedTotal = updatedDay + updatedNight;
+    const updatedReject = existingReject + rejectAmount;
+    const updatedMobile = mobile || existingMobile;
+
+    const updatedRow = [
+      existingSlNo,
+      formattedDate,
+      dioName,
+      finalGpNames,
+      updatedDay,
+      updatedNight,
+      updatedTotal,
+      updatedReject,
+      updatedMobile,
+      existingWorkFHome
+    ];
+
+    await updateSheetRow(sheetTitle, existingRowIndex, updatedRow);
+
+    safeRevalidate();
+    return { success: true };
+  }
+
+  // 5. New entry on this date: scan backwards to find the last data row and calculate SL NO.
+  const newGpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
+
   let lastDataRow: string[] | null = null;
   let lastDataDate = '';
   let lastSlNoForDate = 0;
@@ -87,9 +172,9 @@ export async function createSubmission(data: {
     if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
       if (!lastDataRow) {
         lastDataRow = r;
-        lastDataDate = r[1]?.trim() || '';
+        lastDataDate = toDDMMYYYY(r[1] || '');
       }
-      if (r[1]?.trim() === formattedDate) {
+      if (toDDMMYYYY(r[1] || '') === formattedDate) {
         const sl = parseInt(r[0], 10);
         if (!isNaN(sl) && sl > lastSlNoForDate) {
           lastSlNoForDate = sl;
@@ -100,7 +185,7 @@ export async function createSubmission(data: {
 
   const rowsToAppend: any[][] = [];
 
-  // 5. Date change logic:
+  // 6. Date change logic:
   // If there are existing data rows and date changed, insert HEADER_ROW and start SL NO. at 1
   if (lastDataRow && lastDataDate !== formattedDate) {
     rowsToAppend.push(HEADER_ROW);
@@ -108,7 +193,7 @@ export async function createSubmission(data: {
       1,
       formattedDate,
       dioName,
-      gpNames,
+      newGpNames,
       dayAmount,
       nightAmount,
       totalAmount,
@@ -123,7 +208,7 @@ export async function createSubmission(data: {
       nextSlNo,
       formattedDate,
       dioName,
-      gpNames,
+      newGpNames,
       dayAmount,
       nightAmount,
       totalAmount,
@@ -135,8 +220,7 @@ export async function createSubmission(data: {
 
   await appendSheetRows(sheetTitle, rowsToAppend);
 
-  revalidatePath('/old');
-  revalidatePath('/');
+  safeRevalidate();
   return { success: true };
 }
 
@@ -195,8 +279,7 @@ export async function updateSubmission(
 
     await updateSheetRow(sheetTitle, rowIndex, updatedRow);
 
-    revalidatePath('/old');
-    revalidatePath('/');
+    safeRevalidate();
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to update record' };
@@ -212,8 +295,7 @@ export async function deleteSubmission(id: string) {
 
     await deleteSheetRow(sheetTitle, rowIndex);
 
-    revalidatePath('/old');
-    revalidatePath('/');
+    safeRevalidate();
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to delete record' };
