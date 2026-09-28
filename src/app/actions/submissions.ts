@@ -7,6 +7,7 @@ import { getGoogleDoc } from '@/lib/google-sheets';
 export type RecordRow = {
   Date: string;
   Name: string;
+  Mobile?: string;
   'GP (entry or verify)': string;
   Day: number;
   Night: number;
@@ -27,17 +28,17 @@ async function getSheetForType(doc: any, type: 'ENTRY' | 'VERIFY') {
   if (type === 'ENTRY') {
     const sheet = doc.sheetsByIndex[0];
     try {
-      await sheet.setHeaderRow(['Date', 'Name', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
+      await sheet.setHeaderRow(['Date', 'Name', 'Mobile', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
     } catch (e) {}
     return sheet;
   } else {
     let sheet = doc.sheetsByTitle['Verify'];
     if (!sheet) {
       sheet = await doc.addSheet({ title: 'Verify' });
-      await sheet.setHeaderRow(['Date', 'Name', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
+      await sheet.setHeaderRow(['Date', 'Name', 'Mobile', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
     } else {
       try {
-        await sheet.setHeaderRow(['Date', 'Name', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
+        await sheet.setHeaderRow(['Date', 'Name', 'Mobile', 'GP (entry or verify)', 'Day', 'Night', 'Total', 'Reject', 'Submitted At', 'Last Update', 'Record Type']);
       } catch (e) {}
     }
     return sheet;
@@ -47,6 +48,7 @@ async function getSheetForType(doc: any, type: 'ENTRY' | 'VERIFY') {
 export async function createSubmission(data: {
   date: string;
   name: string;
+  mobile?: string;
   recordType: string;
   items: {
     gpName: string;
@@ -94,6 +96,7 @@ export async function createSubmission(data: {
       await sheet.addRow({
         Date: data.date,
         Name: normalizedName,
+        Mobile: data.mobile || '',
         'GP (entry or verify)': item.gpName,
         Day: item.shift === 'DAY' ? item.amount : 0,
         Night: item.shift === 'NIGHT' ? item.amount : 0,
@@ -115,6 +118,7 @@ export async function updateSubmission(
   data: {
     date: string;
     name: string;
+    mobile?: string;
     recordType: string;
     items: {
       gpName: string;
@@ -167,6 +171,7 @@ export async function updateSubmission(
       mergedMap.set(key, {
         Date: data.date,
         Name: normalizedName,
+        Mobile: data.mobile || '',
         'GP (entry or verify)': item.gpName,
         Day: 0,
         Night: 0,
@@ -238,6 +243,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
         id: uiId,
         date: date,
         name: name,
+        mobile: row.get('Mobile') || '',
         recordType: recordType,
         createdAt: submittedDate,
         editUntil: new Date(submittedDate.getTime() + 30 * 60 * 1000),

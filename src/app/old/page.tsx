@@ -52,12 +52,12 @@ export default async function OldRecordsPage(props: {
       <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs">
         <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Name / ID</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DIO Name / ID</label>
             <input 
               name="name" 
               type="text" 
               defaultValue={name}
-              placeholder="Search by name..."
+              placeholder="Search by DIO name..."
               className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
             />
           </div>
@@ -79,7 +79,7 @@ export default async function OldRecordsPage(props: {
             >
               <option value="All">All Types</option>
               <option value="ENTRY">Entry Only</option>
-              <option value="VERIFY">Verify Only</option>
+              <option value="VERIFY">Verified Only</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -134,8 +134,9 @@ export default async function OldRecordsPage(props: {
                       <p className="font-semibold text-gray-900 text-sm mt-0.5">{sub.date.split('-').reverse().join('-')}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase">Name</p>
+                      <p className="text-xs font-semibold text-gray-500 uppercase">DIO Name</p>
                       <p className="font-semibold text-gray-900 text-sm mt-0.5">{sub.name}</p>
+                      {sub.mobile && <p className="text-xs text-gray-500">{sub.mobile}</p>}
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase">Type</p>

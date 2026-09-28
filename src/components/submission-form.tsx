@@ -27,6 +27,7 @@ const GP_LIST = [
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
   name: z.string().min(1, 'DIO Name is required').trim(),
+  mobile: z.string().min(10, 'Enter valid 10-digit mobile number').regex(/^[0-9]{10}$/, 'Must be a 10-digit mobile number'),
   recordType: z.enum(['ENTRY', 'VERIFY']),
   items: z.array(z.object({
     gpName: z.string().min(1, 'GP is required'),
@@ -58,6 +59,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
     defaultValues: initialData || {
       date: defaultDate,
       name: '',
+      mobile: '',
       recordType: 'ENTRY',
       items: [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
     },
@@ -141,13 +143,19 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
             <span className="font-bold text-gray-900 text-base">{previewData.name}</span>
           </div>
 
-          {/* 2. Date */}
+          {/* 2. Mobile Number */}
+          <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-white">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Mobile Number</span>
+            <span className="font-semibold text-gray-900">{previewData.mobile}</span>
+          </div>
+
+          {/* 3. Date */}
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-white">
             <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Date</span>
             <span className="font-semibold text-gray-900">{previewData.date.split('-').reverse().join('-')}</span>
           </div>
 
-          {/* 3. Record Type */}
+          {/* 4. Record Type */}
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-white">
             <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Record Type</span>
             <span className={`w-fit px-3 py-1 rounded text-xs font-bold ${previewData.recordType === 'ENTRY' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
@@ -189,7 +197,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-gray-600 font-medium">Reject Amount:</span>
+                <span className="text-gray-600 font-medium">Reject:</span>
                 <span className="font-bold text-rose-600 text-base">{item.problemAmount.toLocaleString('en-IN')}</span>
               </div>
             </div>
@@ -203,7 +211,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
             <span className="font-bold text-gray-900 text-lg">{totalAmount.toLocaleString('en-IN')}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="font-semibold text-gray-700">Total Reject Amount:</span>
+            <span className="font-semibold text-gray-700">Total Reject:</span>
             <span className="font-bold text-rose-600 text-lg">{totalProblem.toLocaleString('en-IN')}</span>
           </div>
         </div>
@@ -248,7 +256,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
       )}
 
       {/* Top Section */}
-      <div className="grid md:grid-cols-2 gap-5">
+      <div className="grid sm:grid-cols-3 gap-4 sm:gap-5">
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Date</label>
           <input 
@@ -274,6 +282,21 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
             )}
           />
           {errors.name && <p className="text-rose-600 text-xs font-medium">{errors.name.message}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile Number</label>
+          <input 
+            type="tel" 
+            maxLength={10}
+            placeholder="Enter 10-digit mobile"
+            {...register('mobile')}
+            className={cn(
+              "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
+              errors.mobile ? "border-rose-400" : "border-gray-300"
+            )}
+          />
+          {errors.mobile && <p className="text-rose-600 text-xs font-medium">{errors.mobile.message}</p>}
         </div>
       </div>
 
@@ -376,7 +399,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700">Reject Amount</label>
+                <label className="text-xs font-semibold text-gray-700">Reject</label>
                 <input 
                   type="number" 
                   step="any"

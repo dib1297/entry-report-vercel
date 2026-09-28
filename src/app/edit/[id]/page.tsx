@@ -34,6 +34,7 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
   const initialData = {
     date: submission.date,
     name: submission.name,
+    mobile: submission.mobile || '',
     recordType: submission.recordType as 'ENTRY' | 'VERIFY',
     items: submission.items.map((item: any) => ({
       gpName: item.gpName,
