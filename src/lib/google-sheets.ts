@@ -151,6 +151,104 @@ export async function formatRowLikeHeader(sheetTitle: string, targetRowIndex: nu
   });
 }
 
+export function calculateGpFontSize(gpText: string): number {
+  if (!gpText) return 10;
+  const count = gpText.split('+').filter(Boolean).length;
+  const len = gpText.length;
+
+  if (count >= 4 || len > 45) {
+    return 6;
+  } else if (count === 3 || len > 30) {
+    return 7;
+  } else if (count === 2 || len > 18) {
+    return 8;
+  }
+  return 10;
+}
+
+export async function adjustGpCellFontSize(sheetTitle: string, rowIndex: number, gpText: string) {
+  const fontSize = calculateGpFontSize(gpText);
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) throw new Error(`Sheet ${sheetTitle} not found`);
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await auth.request({
+    url: urlBatch,
+    method: 'POST',
+    data: {
+      requests: [
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 3, // Column D (GP NAME)
+              endColumnIndex: 4,
+            },
+            cell: {
+              userEnteredFormat: {
+                textFormat: {
+                  fontSize: fontSize,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.textFormat.fontSize',
+          },
+        },
+      ],
+    },
+  });
+}
+
+export async function adjustAllGpFontSizes(sheetTitle: string, rows: string[][]) {
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) return;
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const requests: any[] = [];
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && r.length >= 4 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
+      const gpText = r[3] || '';
+      const fontSize = calculateGpFontSize(gpText);
+      requests.push({
+        repeatCell: {
+          range: {
+            sheetId: sheetId,
+            startRowIndex: i,
+            endRowIndex: i + 1,
+            startColumnIndex: 3,
+            endColumnIndex: 4,
+          },
+          cell: {
+            userEnteredFormat: {
+              textFormat: {
+                fontSize: fontSize,
+              },
+            },
+          },
+          fields: 'userEnteredFormat.textFormat.fontSize',
+        },
+      });
+    }
+  }
+
+  if (requests.length > 0) {
+    const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+    await auth.request({
+      url: urlBatch,
+      method: 'POST',
+      data: { requests },
+    });
+  }
+}
+
 export async function getSpreadsheetMetadata() {
   const { auth, spreadsheetId } = getSheetsAuth();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;

@@ -9,7 +9,9 @@ import {
   deleteSheetRow,
   insertSheetRow,
   insertSheetRows,
-  formatRowLikeHeader
+  formatRowLikeHeader,
+  adjustGpCellFontSize,
+  adjustAllGpFontSizes
 } from '@/lib/google-sheets';
 
 const HEADER_ROW = [
@@ -118,6 +120,11 @@ export async function createSubmission(data: {
     }
   }
 
+  // Ensure all existing rows with multiple GPs have their font size adjusted
+  try {
+    await adjustAllGpFontSizes(sheetTitle, rows);
+  } catch (_) {}
+
   // 3. Check if DIO already has a row on the SAME DATE in this sheet
   // Rule: A DIO name cannot appear twice on the same date; GP names merge with '+' and amounts add up
   let existingRowIndex = -1;
@@ -180,6 +187,9 @@ export async function createSubmission(data: {
     ];
 
     await updateSheetRow(sheetTitle, existingRowIndex, updatedRow);
+    try {
+      await adjustGpCellFontSize(sheetTitle, existingRowIndex, finalGpNames);
+    } catch (_) {}
 
     safeRevalidate();
     return { success: true };
@@ -225,9 +235,17 @@ export async function createSubmission(data: {
       // Subsequent date sections (e.g. 30th date section) already exist below this date!
       // Insert right after the last row of this date (at lastRowIndexForThisDate + 1)
       await insertSheetRow(sheetTitle, lastRowIndexForThisDate + 1, newRow);
+      try {
+        await adjustGpCellFontSize(sheetTitle, lastRowIndexForThisDate + 1, newGpNames);
+      } catch (_) {}
     } else {
       // This date section is currently the last section in the sheet
-      await appendSheetRows(sheetTitle, [newRow]);
+      const appendRes = await appendSheetRows(sheetTitle, [newRow]);
+      try {
+        const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
+        const newRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
+        await adjustGpCellFontSize(sheetTitle, newRowIdx, newGpNames);
+      } catch (_) {}
     }
 
     safeRevalidate();
@@ -276,6 +294,7 @@ export async function createSubmission(data: {
     await insertSheetRows(sheetTitle, firstLaterRowIndex, rowsToInsert);
     try {
       await formatRowLikeHeader(sheetTitle, firstLaterRowIndex);
+      await adjustGpCellFontSize(sheetTitle, firstLaterRowIndex + 1, newGpNames);
     } catch (_) {}
   } else {
     // Newer date (or first date in fresh sheet)
@@ -286,10 +305,11 @@ export async function createSubmission(data: {
         const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
         const headerRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
         await formatRowLikeHeader(sheetTitle, headerRowIdx);
+        await adjustGpCellFontSize(sheetTitle, headerRowIdx + 1, newGpNames);
       } catch (_) {}
     } else {
       // First date in fresh sheet (row 2 is already HEADER_ROW)
-      await appendSheetRows(sheetTitle, [
+      const appendRes = await appendSheetRows(sheetTitle, [
         [
           1,
           formattedDate,
@@ -303,6 +323,11 @@ export async function createSubmission(data: {
           ''
         ]
       ]);
+      try {
+        const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
+        const newRowIdx = match ? parseInt(match[1], 10) : 3;
+        await adjustGpCellFontSize(sheetTitle, newRowIdx, newGpNames);
+      } catch (_) {}
     }
   }
 
@@ -364,6 +389,9 @@ export async function updateSubmission(
     ];
 
     await updateSheetRow(sheetTitle, rowIndex, updatedRow);
+    try {
+      await adjustGpCellFontSize(sheetTitle, rowIndex, gpNames);
+    } catch (_) {}
 
     safeRevalidate();
     return { success: true };
