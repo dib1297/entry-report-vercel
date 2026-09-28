@@ -100,6 +100,57 @@ export async function insertSheetRow(sheetTitle: string, rowIndex: number, rowVa
   return insertSheetRows(sheetTitle, rowIndex, [rowValues]);
 }
 
+export async function formatRowLikeHeader(sheetTitle: string, targetRowIndex: number) {
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) throw new Error(`Sheet ${sheetTitle} not found`);
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await auth.request({
+    url: urlBatch,
+    method: 'POST',
+    data: {
+      requests: [
+        {
+          copyPaste: {
+            source: {
+              sheetId: sheetId,
+              startRowIndex: 1, // Row 2 (0-based index 1)
+              endRowIndex: 2,
+              startColumnIndex: 0,
+              endColumnIndex: 10,
+            },
+            destination: {
+              sheetId: sheetId,
+              startRowIndex: targetRowIndex - 1,
+              endRowIndex: targetRowIndex,
+              startColumnIndex: 0,
+              endColumnIndex: 10,
+            },
+            pasteType: 'PASTE_FORMAT',
+          },
+        },
+        {
+          updateDimensionProperties: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: targetRowIndex - 1,
+              endIndex: targetRowIndex,
+            },
+            properties: {
+              pixelSize: 33,
+            },
+            fields: 'pixelSize',
+          },
+        },
+      ],
+    },
+  });
+}
+
 export async function getSpreadsheetMetadata() {
   const { auth, spreadsheetId } = getSheetsAuth();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;

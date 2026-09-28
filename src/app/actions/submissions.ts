@@ -8,7 +8,8 @@ import {
   updateSheetRow, 
   deleteSheetRow,
   insertSheetRow,
-  insertSheetRows
+  insertSheetRows,
+  formatRowLikeHeader
 } from '@/lib/google-sheets';
 
 const HEADER_ROW = [
@@ -106,6 +107,16 @@ export async function createSubmission(data: {
 
   // 2. Fetch existing rows from the target sheet
   const rows = await getSheetValues(sheetTitle, 'A1:J');
+
+  // Ensure any existing repeated header rows in the sheet have exact same styling as Row 2
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && r[0] === 'SL NO.' && r[1] === 'DATE') {
+      try {
+        await formatRowLikeHeader(sheetTitle, i + 1);
+      } catch (_) {}
+    }
+  }
 
   // 3. Check if DIO already has a row on the SAME DATE in this sheet
   // Rule: A DIO name cannot appear twice on the same date; GP names merge with '+' and amounts add up
@@ -263,11 +274,19 @@ export async function createSubmission(data: {
   if (firstLaterRowIndex > 0) {
     // Older date submitted that belongs before a later date
     await insertSheetRows(sheetTitle, firstLaterRowIndex, rowsToInsert);
+    try {
+      await formatRowLikeHeader(sheetTitle, firstLaterRowIndex);
+    } catch (_) {}
   } else {
     // Newer date (or first date in fresh sheet)
     const hasExistingData = rows.some(r => r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y'));
     if (hasExistingData) {
-      await appendSheetRows(sheetTitle, rowsToInsert);
+      const appendRes = await appendSheetRows(sheetTitle, rowsToInsert);
+      try {
+        const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
+        const headerRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
+        await formatRowLikeHeader(sheetTitle, headerRowIdx);
+      } catch (_) {}
     } else {
       // First date in fresh sheet (row 2 is already HEADER_ROW)
       await appendSheetRows(sheetTitle, [
