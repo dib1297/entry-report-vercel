@@ -1,26 +1,26 @@
 import { getSubmissions } from "@/app/actions/submissions";
 import Link from "next/link";
-import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle } from "lucide-react";
+import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle, ShieldCheck } from "lucide-react";
 import DeleteButton from "@/components/delete-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function OldRecordsPage(props: {
-  searchParams?: Promise<{ name?: string; date?: string; recordType?: string; updated?: string }> | { name?: string; date?: string; recordType?: string; updated?: string };
+  searchParams?: Promise<{ name?: string; date?: string; mobile?: string; recordType?: string; updated?: string }> | { name?: string; date?: string; mobile?: string; recordType?: string; updated?: string };
 }) {
   const resolvedParams = props?.searchParams ? await props.searchParams : {};
   const name = typeof resolvedParams?.name === 'string' ? resolvedParams.name.trim() : '';
+  const mobile = typeof resolvedParams?.mobile === 'string' ? resolvedParams.mobile.trim() : '';
   const date = typeof resolvedParams?.date === 'string' ? resolvedParams.date.trim() : '';
   const recordType = typeof resolvedParams?.recordType === 'string' ? resolvedParams.recordType : '';
   const isUpdated = Boolean(resolvedParams?.updated);
 
-  const hasFilter = Boolean(
-    name || 
-    date || 
-    (recordType && recordType !== 'All')
-  );
+  // Security rule: Reports will NEVER be displayed without specific search criteria (DIO Name, Mobile, or Date).
+  const hasFilter = Boolean(name || mobile || date);
 
-  const submissions = await getSubmissions({ name, date, recordType });
+  const submissions = hasFilter 
+    ? await getSubmissions({ name, mobile, date, recordType }) 
+    : [];
 
   return (
     <div className="space-y-6">
@@ -36,8 +36,13 @@ export default async function OldRecordsPage(props: {
       {/* Header */}
       <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-200 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Edit & View Records</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Search, review, edit, or delete existing submissions.</p>
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <span>Edit & View Records</span>
+            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-flex items-center gap-1">
+              <ShieldCheck size={13} /> Protected
+            </span>
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5">Enter your DIO name or mobile number to search and edit submissions.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -57,14 +62,27 @@ export default async function OldRecordsPage(props: {
 
       {/* Filter Section */}
       <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs">
-        <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        <form className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3.5 items-end">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DIO Name</label>
             <input 
               name="name" 
               type="text" 
+              autoComplete="off"
               defaultValue={name}
-              placeholder="Search by DIO name..."
+              placeholder="Enter DIO name..."
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile No.</label>
+            <input 
+              name="mobile" 
+              type="tel" 
+              maxLength={10}
+              autoComplete="off"
+              defaultValue={mobile}
+              placeholder="Enter 10-digit mobile..."
               className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
             />
           </div>
@@ -84,17 +102,17 @@ export default async function OldRecordsPage(props: {
               defaultValue={recordType || 'All'}
               className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
             >
-              <option value="All">All Types (Entry & Verified)</option>
+              <option value="All">All (Entry & Verified)</option>
               <option value="ENTRY">Entry Only</option>
               <option value="VERIFY">Verified Only</option>
             </select>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5">
-              <Search size={16} /> Filter
+            <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3.5 rounded-lg text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+              <Search size={16} /> Search
             </button>
             {hasFilter && (
-              <Link href="/old" className="px-3.5 py-2 rounded-lg border border-gray-300 font-semibold text-gray-700 text-sm hover:bg-gray-50 transition-colors flex items-center justify-center">
+              <Link href="/old" className="px-3 py-2 rounded-lg border border-gray-300 font-semibold text-gray-700 text-sm hover:bg-gray-50 transition-colors flex items-center justify-center">
                 Clear
               </Link>
             )}
@@ -104,18 +122,36 @@ export default async function OldRecordsPage(props: {
 
       {/* Results Section */}
       <div className="space-y-3">
-        {submissions.length === 0 ? (
-          <div className="bg-white p-12 rounded-xl border border-gray-200 text-center shadow-xs">
-            <Search className="mx-auto h-10 w-10 text-rose-300 mb-3" />
+        {!hasFilter ? (
+          <div className="bg-white p-10 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
+            <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-3">
+              <Search size={22} />
+            </div>
             <h3 className="text-base font-semibold text-gray-800">
-              {hasFilter ? 'No Records Found' : 'No Submissions Yet'}
+              Search to View Records
             </h3>
-            <p className="text-xs text-gray-500 mt-1">
-              {hasFilter ? 'No matching submissions found for your filter criteria.' : 'Create a new submission from the home page or click New Entry above.'}
+            <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+              For privacy and security, reports are hidden. Please enter your DIO Name, Mobile Number, or select a Date above and click Search.
+            </p>
+          </div>
+        ) : submissions.length === 0 ? (
+          <div className="bg-white p-10 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
+            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-500 mx-auto flex items-center justify-center mb-3">
+              <Search size={22} />
+            </div>
+            <h3 className="text-base font-semibold text-gray-800">
+              No Records Found
+            </h3>
+            <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+              No matching submissions found for your search criteria. Please check your DIO name, mobile number, or date and try again.
             </p>
           </div>
         ) : (
-          submissions.map((sub) => {
+          <>
+            <div className="flex items-center justify-between text-xs text-gray-500 px-1 font-medium">
+              <span>Found <strong>{submissions.length}</strong> matching {submissions.length === 1 ? 'record' : 'records'}</span>
+            </div>
+            {submissions.map((sub) => {
             const day = Number(sub.day) || 0;
             const night = Number(sub.night) || 0;
             const total = Number(sub.total) || (day + night);
@@ -208,7 +244,8 @@ export default async function OldRecordsPage(props: {
                 </div>
               </details>
             );
-          })
+          })}
+          </>
         )}
       </div>
     </div>

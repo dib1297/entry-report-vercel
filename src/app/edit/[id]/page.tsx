@@ -41,7 +41,7 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
             {submission.recordType === 'ENTRY' ? 'Entry Record' : 'Verified Record'} • {submission.displayDate}
           </span>
           <Link
-            href="/old"
+            href={`/old?name=${encodeURIComponent(submission.name)}`}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={14} /> Back to Records

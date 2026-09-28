@@ -103,7 +103,7 @@ export default function SubmissionForm({
           : await createSubmission(previewData);
           
         if (res.success) {
-          router.push(isEditing ? '/old?updated=1' : '/?success=1');
+          router.push(isEditing ? `/old?updated=1&name=${encodeURIComponent(previewData.name)}` : '/?success=1');
           router.refresh();
         } else if ('error' in res) {
           setErrorMsg((res as any).error || 'Failed to submit data');

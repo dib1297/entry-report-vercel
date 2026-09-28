@@ -520,7 +520,7 @@ export async function deleteSubmission(id: string) {
   }
 }
 
-export async function getSubmissions(query?: { name?: string; date?: string; recordType?: string }) {
+export async function getSubmissions(query?: { name?: string; date?: string; recordType?: string; mobile?: string }) {
   const titlesToFetch: ('Entry' | 'Verified')[] = [];
   if (!query?.recordType || query.recordType === 'All' || query.recordType === 'ENTRY') {
     titlesToFetch.push('Entry');
@@ -532,6 +532,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
   const results: any[] = [];
   const queryName = query?.name ? query.name.trim().toLowerCase() : '';
   const queryDate = query?.date ? toDDMMYYYY(query.date.trim()) : '';
+  const queryMobile = query?.mobile ? query.mobile.trim().replace(/\D/g, '') : '';
 
   for (const sheetTitle of titlesToFetch) {
     const rows = await getSheetValues(sheetTitle, 'A1:J');
@@ -556,6 +557,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
 
       if (queryName && !name.toLowerCase().includes(queryName)) return;
       if (queryDate && date !== queryDate) return;
+      if (queryMobile && !mobile.replace(/\D/g, '').includes(queryMobile)) return;
       if (query?.recordType && query.recordType !== 'All' && query.recordType !== recType) return;
 
       const uiId = Buffer.from(`${recType}|${rowIndex}|${date}|${name}`).toString('base64url');
