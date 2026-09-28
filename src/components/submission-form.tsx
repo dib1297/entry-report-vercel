@@ -26,7 +26,7 @@ const GP_LIST = [
 
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
-  name: z.string().min(1, 'Name is required').trim(),
+  name: z.string().min(1, 'DIO Name is required').trim(),
   recordType: z.enum(['ENTRY', 'VERIFY']),
   items: z.array(z.object({
     gpName: z.string().min(1, 'GP is required'),
@@ -69,7 +69,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
   });
 
   const recordType = watch('recordType');
-  const amountLabel = recordType === 'ENTRY' ? 'Entry Amount' : 'Verify Amount';
+  const amountLabel = recordType === 'ENTRY' ? 'Entry' : 'Verified';
 
   // Step 1: Validate form and move to Preview step
   const handleProceedToPreview = (data: FormValues) => {
@@ -135,9 +135,9 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
         {/* Sequential Details List: Name -> Date -> Record Type */}
         <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-200 bg-white text-sm">
           
-          {/* 1. Name */}
+          {/* 1. DIO Name */}
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-white">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Name</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">DIO Name</span>
             <span className="font-bold text-gray-900 text-base">{previewData.name}</span>
           </div>
 
@@ -151,7 +151,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-white">
             <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Record Type</span>
             <span className={`w-fit px-3 py-1 rounded text-xs font-bold ${previewData.recordType === 'ENTRY' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
-              {previewData.recordType}
+              {previewData.recordType === 'ENTRY' ? 'ENTRY' : 'VERIFIED'}
             </span>
           </div>
 
@@ -263,10 +263,10 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DIO NAME</label>
           <input 
             type="text" 
-            placeholder="Enter operator / user name"
+            placeholder="Enter DIO name"
             {...register('name')}
             className={cn(
               "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
@@ -289,7 +289,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
           <label className="cursor-pointer">
             <input type="radio" value="VERIFY" {...register('recordType')} className="peer sr-only" />
             <div className="py-2.5 text-center rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 transition-all hover:bg-gray-50">
-              Verify
+              Verified
             </div>
           </label>
         </div>
