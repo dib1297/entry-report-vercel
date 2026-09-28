@@ -39,7 +39,17 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export default function SubmissionForm({ initialData, isEditing = false, editId }: { initialData?: FormValues, isEditing?: boolean, editId?: string }) {
+export default function SubmissionForm({ 
+  initialData, 
+  isEditing = false, 
+  editId,
+  knownDioNames = []
+}: { 
+  initialData?: FormValues, 
+  isEditing?: boolean, 
+  editId?: string,
+  knownDioNames?: string[]
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState('');
@@ -71,6 +81,7 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
   });
 
   const recordType = watch('recordType');
+  const watchItems = watch('items');
   const amountLabel = recordType === 'ENTRY' ? 'Entry' : 'Verified';
 
   // Step 1: Validate form and move to Preview step
@@ -92,8 +103,8 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
           : await createSubmission(previewData);
           
         if (res.success) {
-          // Redirect to home page (1st page)
-          router.push('/');
+          // Redirect to home page with success indicator
+          router.push('/?success=1');
           router.refresh();
         } else if ('error' in res) {
           setErrorMsg((res as any).error || 'Failed to submit data');
@@ -274,13 +285,22 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
           <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DIO NAME</label>
           <input 
             type="text" 
-            placeholder="Enter DIO name"
+            list="known-dios-list"
+            autoComplete="off"
+            placeholder="Enter or select DIO name"
             {...register('name')}
             className={cn(
               "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
               errors.name ? "border-rose-400" : "border-gray-300"
             )}
           />
+          {knownDioNames.length > 0 && (
+            <datalist id="known-dios-list">
+              {knownDioNames.map(dio => (
+                <option key={dio} value={dio} />
+              ))}
+            </datalist>
+          )}
           {errors.name && <p className="text-rose-600 text-xs font-medium">{errors.name.message}</p>}
         </div>
 
@@ -290,7 +310,11 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
             type="tel" 
             maxLength={10}
             placeholder="Enter 10-digit mobile"
-            {...register('mobile')}
+            {...register('mobile', {
+              onChange: (e) => {
+                e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+              }
+            })}
             className={cn(
               "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
               errors.mobile ? "border-rose-400" : "border-gray-300"
@@ -357,9 +381,14 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
                   )}
                 >
                   <option value="">-- Select Gram Panchayat --</option>
-                  {GP_LIST.map(gp => (
-                    <option key={gp} value={gp}>{gp}</option>
-                  ))}
+                  {GP_LIST.map(gp => {
+                    const isSelectedElsewhere = watchItems?.some((it, i) => i !== index && it?.gpName === gp);
+                    return (
+                      <option key={gp} value={gp} disabled={isSelectedElsewhere}>
+                        {gp} {isSelectedElsewhere ? '(Already selected)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 {errors.items?.[index]?.gpName && <p className="text-rose-600 text-xs font-medium">{errors.items?.[index]?.gpName?.message}</p>}
               </div>
@@ -389,6 +418,9 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
                   step="any"
                   min="0"
                   placeholder="0.00"
+                  onFocus={(e) => {
+                    if (e.target.value === '0') e.target.select();
+                  }}
                   {...register(`items.${index}.amount`, { valueAsNumber: true })}
                   className={cn(
                     "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
@@ -405,6 +437,9 @@ export default function SubmissionForm({ initialData, isEditing = false, editId 
                   step="any"
                   min="0"
                   placeholder="0.00"
+                  onFocus={(e) => {
+                    if (e.target.value === '0') e.target.select();
+                  }}
                   {...register(`items.${index}.problemAmount`, { valueAsNumber: true })}
                   className={cn(
                     "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 

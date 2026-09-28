@@ -1,11 +1,26 @@
 import Link from "next/link";
-import { PlusCircle, Search } from "lucide-react";
+import { PlusCircle, Search, CheckCircle, X } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default async function Home(props: { searchParams?: Promise<{ success?: string }> | { success?: string } }) {
+  const resolvedParams = props.searchParams ? await props.searchParams : {};
+  const isSuccess = resolvedParams?.success === '1';
+
   return (
     <div className="max-w-2xl mx-auto py-8 sm:py-16 space-y-6">
+      {isSuccess && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle className="text-emerald-600 shrink-0" size={18} />
+            <span>Report successfully submitted & saved to Google Sheet!</span>
+          </div>
+          <Link href="/" className="text-emerald-500 hover:text-emerald-800 p-1 rounded-md transition-colors" title="Close">
+            <X size={16} />
+          </Link>
+        </div>
+      )}
+
       <div className="text-center space-y-2 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Mukhyamantri Swasthya Bima Yojana Report</h1>
       </div>

@@ -249,6 +249,49 @@ export async function adjustAllGpFontSizes(sheetTitle: string, rows: string[][])
   }
 }
 
+export async function formatDataRow(sheetTitle: string, rowIndex: number) {
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) return;
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const border = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } };
+
+  const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await auth.request({
+    url: urlBatch,
+    method: 'POST',
+    data: {
+      requests: [
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 0,
+              endColumnIndex: 10,
+            },
+            cell: {
+              userEnteredFormat: {
+                verticalAlignment: 'MIDDLE',
+                borders: {
+                  top: border,
+                  bottom: border,
+                  left: border,
+                  right: border,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.verticalAlignment,userEnteredFormat.borders',
+          },
+        },
+      ],
+    },
+  });
+}
+
 export async function getSpreadsheetMetadata() {
   const { auth, spreadsheetId } = getSheetsAuth();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;

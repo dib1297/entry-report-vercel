@@ -1,8 +1,13 @@
 import SubmissionForm from "@/components/submission-form";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { getKnownDioNames } from "@/app/actions/submissions";
 
-export default function NewRecordPage() {
+export const dynamic = "force-dynamic";
+
+export default async function NewRecordPage() {
+  const knownDioNames = await getKnownDioNames();
+
   return (
     <div className="space-y-6">
       <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-200 shadow-xs flex items-center justify-between">
@@ -17,7 +22,7 @@ export default function NewRecordPage() {
           <ArrowLeft size={14} /> Back
         </Link>
       </div>
-      <SubmissionForm />
+      <SubmissionForm knownDioNames={knownDioNames} />
     </div>
   );
 }

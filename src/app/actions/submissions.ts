@@ -11,7 +11,8 @@ import {
   insertSheetRows,
   formatRowLikeHeader,
   adjustGpCellFontSize,
-  adjustAllGpFontSizes
+  adjustAllGpFontSizes,
+  formatDataRow
 } from '@/lib/google-sheets';
 
 const HEADER_ROW = [
@@ -74,6 +75,13 @@ function parseDateToTime(dateStr: string): number {
     return new Date(y, m, d).getTime();
   }
   return 0;
+}
+
+function normalizeGpName(gp: string): string {
+  return gp
+    .trim()
+    .replace(/[–—−]/g, '-')
+    .replace(/\s+/g, ' ');
 }
 
 export async function createSubmission(data: {
@@ -152,10 +160,11 @@ export async function createSubmission(data: {
     const existingGps = existingGpRaw.split('+').map(g => g.trim()).filter(Boolean);
     const newGps = data.items.map(item => item.gpName?.trim()).filter(Boolean);
 
-    // Merge GP names: combine distinct GPs preserving order
+    // Merge GP names: combine distinct GPs preserving order (normalizing dashes and spacing)
     const mergedGps: string[] = [...existingGps];
     for (const gp of newGps) {
-      if (!mergedGps.some(existing => existing.toLowerCase() === gp.toLowerCase())) {
+      const normNew = normalizeGpName(gp).toLowerCase();
+      if (!mergedGps.some(existing => normalizeGpName(existing).toLowerCase() === normNew)) {
         mergedGps.push(gp);
       }
     }
@@ -189,6 +198,7 @@ export async function createSubmission(data: {
     await updateSheetRow(sheetTitle, existingRowIndex, updatedRow);
     try {
       await adjustGpCellFontSize(sheetTitle, existingRowIndex, finalGpNames);
+      await formatDataRow(sheetTitle, existingRowIndex);
     } catch (_) {}
 
     safeRevalidate();
@@ -196,7 +206,14 @@ export async function createSubmission(data: {
   }
 
   // 5. New entry on this date: check if this date already has an existing section in the sheet
-  const newGpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
+  const uniqueGps: string[] = [];
+  data.items.map(item => item.gpName.trim()).filter(Boolean).forEach(gp => {
+    const norm = normalizeGpName(gp).toLowerCase();
+    if (!uniqueGps.some(existing => normalizeGpName(existing).toLowerCase() === norm)) {
+      uniqueGps.push(gp);
+    }
+  });
+  const newGpNames = uniqueGps.join('+');
 
   let lastRowIndexForThisDate = -1; // 1-based index in sheet
   let maxSlNoForThisDate = 0;
@@ -237,6 +254,7 @@ export async function createSubmission(data: {
       await insertSheetRow(sheetTitle, lastRowIndexForThisDate + 1, newRow);
       try {
         await adjustGpCellFontSize(sheetTitle, lastRowIndexForThisDate + 1, newGpNames);
+        await formatDataRow(sheetTitle, lastRowIndexForThisDate + 1);
       } catch (_) {}
     } else {
       // This date section is currently the last section in the sheet
@@ -245,6 +263,7 @@ export async function createSubmission(data: {
         const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
         const newRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
         await adjustGpCellFontSize(sheetTitle, newRowIdx, newGpNames);
+        await formatDataRow(sheetTitle, newRowIdx);
       } catch (_) {}
     }
 
@@ -295,6 +314,7 @@ export async function createSubmission(data: {
     try {
       await formatRowLikeHeader(sheetTitle, firstLaterRowIndex);
       await adjustGpCellFontSize(sheetTitle, firstLaterRowIndex + 1, newGpNames);
+      await formatDataRow(sheetTitle, firstLaterRowIndex + 1);
     } catch (_) {}
   } else {
     // Newer date (or first date in fresh sheet)
@@ -306,6 +326,7 @@ export async function createSubmission(data: {
         const headerRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
         await formatRowLikeHeader(sheetTitle, headerRowIdx);
         await adjustGpCellFontSize(sheetTitle, headerRowIdx + 1, newGpNames);
+        await formatDataRow(sheetTitle, headerRowIdx + 1);
       } catch (_) {}
     } else {
       // First date in fresh sheet (row 2 is already HEADER_ROW)
@@ -327,6 +348,7 @@ export async function createSubmission(data: {
         const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
         const newRowIdx = match ? parseInt(match[1], 10) : 3;
         await adjustGpCellFontSize(sheetTitle, newRowIdx, newGpNames);
+        await formatDataRow(sheetTitle, newRowIdx);
       } catch (_) {}
     }
   }
@@ -391,6 +413,7 @@ export async function updateSubmission(
     await updateSheetRow(sheetTitle, rowIndex, updatedRow);
     try {
       await adjustGpCellFontSize(sheetTitle, rowIndex, gpNames);
+      await formatDataRow(sheetTitle, rowIndex);
     } catch (_) {}
 
     safeRevalidate();
@@ -553,5 +576,24 @@ export async function getSubmission(id: string) {
     };
   } catch (e) {
     return null;
+  }
+}
+
+export async function getKnownDioNames(): Promise<string[]> {
+  try {
+    const entryRows = await getSheetValues('Entry', 'C3:C100');
+    const verifiedRows = await getSheetValues('Verified', 'C3:C100');
+    const names = new Set<string>();
+
+    [...entryRows, ...verifiedRows].forEach(r => {
+      const name = r?.[0]?.trim();
+      if (name && name !== 'DIO NAME' && !name.includes('M M S B Y') && name.length >= 2) {
+        names.add(normalizeName(name));
+      }
+    });
+
+    return Array.from(names).sort();
+  } catch {
+    return [];
   }
 }
