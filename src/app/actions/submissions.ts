@@ -6,7 +6,9 @@ import {
   getSheetValues, 
   appendSheetRows, 
   updateSheetRow, 
-  deleteSheetRow 
+  deleteSheetRow,
+  insertSheetRow,
+  insertSheetRows
 } from '@/lib/google-sheets';
 
 const HEADER_ROW = [
@@ -57,6 +59,18 @@ function toYYYYMMDD(dateStr: string): string {
     }
   }
   return clean;
+}
+
+function parseDateToTime(dateStr: string): number {
+  const ddmmyyyy = toDDMMYYYY(dateStr);
+  const parts = ddmmyyyy.split('-');
+  if (parts.length === 3) {
+    const d = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const y = parseInt(parts[2], 10);
+    return new Date(y, m, d).getTime();
+  }
+  return 0;
 }
 
 export async function createSubmission(data: {
@@ -160,51 +174,30 @@ export async function createSubmission(data: {
     return { success: true };
   }
 
-  // 5. New entry on this date: scan backwards to find the last data row and calculate SL NO.
+  // 5. New entry on this date: check if this date already has an existing section in the sheet
   const newGpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
 
-  let lastDataRow: string[] | null = null;
-  let lastDataDate = '';
-  let lastSlNoForDate = 0;
+  let lastRowIndexForThisDate = -1; // 1-based index in sheet
+  let maxSlNoForThisDate = 0;
 
-  for (let i = rows.length - 1; i >= 0; i--) {
+  for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
-      if (!lastDataRow) {
-        lastDataRow = r;
-        lastDataDate = toDDMMYYYY(r[1] || '');
-      }
-      if (toDDMMYYYY(r[1] || '') === formattedDate) {
+      const rowDate = toDDMMYYYY(r[1] || '');
+      if (rowDate === formattedDate) {
+        lastRowIndexForThisDate = i + 1;
         const sl = parseInt(r[0], 10);
-        if (!isNaN(sl) && sl > lastSlNoForDate) {
-          lastSlNoForDate = sl;
+        if (!isNaN(sl) && sl > maxSlNoForThisDate) {
+          maxSlNoForThisDate = sl;
         }
       }
     }
   }
 
-  const rowsToAppend: any[][] = [];
-
-  // 6. Date change logic:
-  // If there are existing data rows and date changed, insert HEADER_ROW and start SL NO. at 1
-  if (lastDataRow && lastDataDate !== formattedDate) {
-    rowsToAppend.push(HEADER_ROW);
-    rowsToAppend.push([
-      1,
-      formattedDate,
-      dioName,
-      newGpNames,
-      dayAmount,
-      nightAmount,
-      totalAmount,
-      rejectAmount,
-      mobile,
-      ''
-    ]);
-  } else {
-    // Same date or first entry in sheet
-    const nextSlNo = lastSlNoForDate + 1;
-    rowsToAppend.push([
+  // Case A: This date already has a section in the sheet
+  if (lastRowIndexForThisDate > 0) {
+    const nextSlNo = maxSlNoForThisDate + 1;
+    const newRow = [
       nextSlNo,
       formattedDate,
       dioName,
@@ -215,10 +208,84 @@ export async function createSubmission(data: {
       rejectAmount,
       mobile,
       ''
-    ]);
+    ];
+
+    if (lastRowIndexForThisDate < rows.length) {
+      // Subsequent date sections (e.g. 30th date section) already exist below this date!
+      // Insert right after the last row of this date (at lastRowIndexForThisDate + 1)
+      await insertSheetRow(sheetTitle, lastRowIndexForThisDate + 1, newRow);
+    } else {
+      // This date section is currently the last section in the sheet
+      await appendSheetRows(sheetTitle, [newRow]);
+    }
+
+    safeRevalidate();
+    return { success: true };
   }
 
-  await appendSheetRows(sheetTitle, rowsToAppend);
+  // Case B: This date has no data rows in the sheet yet
+  const targetTime = parseDateToTime(formattedDate);
+  let firstLaterRowIndex = -1; // 1-based index where a later date starts
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
+      const rowDate = toDDMMYYYY(r[1] || '');
+      const rowTime = parseDateToTime(rowDate);
+      if (rowTime > targetTime) {
+        // Found a later date section!
+        // If the row above is HEADER_ROW, insert before HEADER_ROW
+        if (i > 0 && rows[i - 1][0] === 'SL NO.') {
+          firstLaterRowIndex = i; // 1-based index of HEADER_ROW
+        } else {
+          firstLaterRowIndex = i + 1;
+        }
+        break;
+      }
+    }
+  }
+
+  const rowsToInsert: any[][] = [];
+  rowsToInsert.push(HEADER_ROW);
+  rowsToInsert.push([
+    1,
+    formattedDate,
+    dioName,
+    newGpNames,
+    dayAmount,
+    nightAmount,
+    totalAmount,
+    rejectAmount,
+    mobile,
+    ''
+  ]);
+
+  if (firstLaterRowIndex > 0) {
+    // Older date submitted that belongs before a later date
+    await insertSheetRows(sheetTitle, firstLaterRowIndex, rowsToInsert);
+  } else {
+    // Newer date (or first date in fresh sheet)
+    const hasExistingData = rows.some(r => r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y'));
+    if (hasExistingData) {
+      await appendSheetRows(sheetTitle, rowsToInsert);
+    } else {
+      // First date in fresh sheet (row 2 is already HEADER_ROW)
+      await appendSheetRows(sheetTitle, [
+        [
+          1,
+          formattedDate,
+          dioName,
+          newGpNames,
+          dayAmount,
+          nightAmount,
+          totalAmount,
+          rejectAmount,
+          mobile,
+          ''
+        ]
+      ]);
+    }
+  }
 
   safeRevalidate();
   return { success: true };

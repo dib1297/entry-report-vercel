@@ -55,6 +55,51 @@ export async function updateSheetRow(sheetTitle: string, rowIndex: number, rowVa
   return res.data;
 }
 
+export async function insertSheetRows(sheetTitle: string, rowIndex: number, rowsValues: any[][]) {
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) throw new Error(`Sheet ${sheetTitle} not found`);
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const count = rowsValues.length;
+  if (count === 0) return;
+
+  const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await auth.request({
+    url: urlBatch,
+    method: 'POST',
+    data: {
+      requests: [
+        {
+          insertDimension: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex - 1,
+              endIndex: rowIndex - 1 + count,
+            },
+            inheritFromBefore: true,
+          },
+        },
+      ],
+    },
+  });
+
+  const endRowIndex = rowIndex + count - 1;
+  const urlValues = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:J${endRowIndex}`)}?valueInputOption=USER_ENTERED`;
+  const res: any = await auth.request({
+    url: urlValues,
+    method: 'PUT',
+    data: { values: rowsValues },
+  });
+  return res.data;
+}
+
+export async function insertSheetRow(sheetTitle: string, rowIndex: number, rowValues: any[]) {
+  return insertSheetRows(sheetTitle, rowIndex, [rowValues]);
+}
+
 export async function getSpreadsheetMetadata() {
   const { auth, spreadsheetId } = getSheetsAuth();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
