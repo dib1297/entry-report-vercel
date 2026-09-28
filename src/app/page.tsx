@@ -7,8 +7,7 @@ export default function Home() {
   return (
     <div className="max-w-2xl mx-auto py-8 sm:py-16 space-y-6">
       <div className="text-center space-y-2 mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Select an Option</h1>
-        <p className="text-sm text-gray-500">Choose whether to create a new submission or view old records.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Mukhyamantri Swasthya Bima Yojana Report</h1>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-6">
@@ -21,8 +20,8 @@ export default function Home() {
             <PlusCircle size={44} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">NEW</h2>
-            <p className="text-xs text-gray-500 mt-1 font-medium">New Entry / Verification</p>
+            <h2 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">NEW REPORT</h2>
+            <p className="text-xs text-gray-500 mt-1 font-medium">M M S B Y</p>
           </div>
         </Link>
 
@@ -35,8 +34,8 @@ export default function Home() {
             <Search size={44} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 group-hover:text-gray-900 transition-colors">OLD</h2>
-            <p className="text-xs text-gray-500 mt-1 font-medium">Search & View Old Records</p>
+            <h2 className="text-2xl font-bold text-gray-900 group-hover:text-gray-900 transition-colors">EDIT SECTION</h2>
+            <p className="text-xs text-gray-500 mt-1 font-medium">Within 30 Mins</p>
           </div>
         </Link>
       </div>
