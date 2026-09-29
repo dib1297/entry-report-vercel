@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PlusCircle, Search, CheckCircle, X } from "lucide-react";
+import { PlusCircle, Edit, CheckCircle, X } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,7 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
             <PlusCircle size={44} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">NEW REPORT</h2>
+            <h2 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">DEO'S ENTRY</h2>
             <p className="text-xs text-gray-500 mt-1 font-medium">M M S B Y</p>
           </div>
         </Link>
@@ -46,7 +46,7 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
           className="bg-white p-8 rounded-2xl border-2 border-gray-200 shadow-xs hover:border-gray-900 hover:shadow-md transition-all flex flex-col items-center justify-center text-center gap-4 group cursor-pointer"
         >
           <div className="w-20 h-20 rounded-2xl bg-gray-100 text-gray-700 flex items-center justify-center group-hover:bg-gray-900 group-hover:text-white transition-colors">
-            <Search size={44} />
+            <Edit size={44} />
           </div>
           <div>
             <h2 className="text-2xl font-bold text-gray-900 group-hover:text-gray-900 transition-colors">EDIT SECTION</h2>
