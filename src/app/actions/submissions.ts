@@ -18,7 +18,7 @@ import {
 const HEADER_ROW = [
   "SL NO.",
   "DATE",
-  "DIO NAME",
+  "DEO NAME",
   "GP NAME",
   "DAY",
   "NIGHT",
@@ -98,7 +98,7 @@ export async function createSubmission(data: {
 }) {
   const sheetTitle = data.recordType === 'ENTRY' ? 'Entry' : 'Verified';
   const formattedDate = toDDMMYYYY(data.date);
-  const dioName = normalizeName(data.name);
+  const deoName = normalizeName(data.name);
   const mobile = data.mobile ? data.mobile.trim() : '';
 
   // 1. Calculate Day & Night totals
@@ -133,8 +133,8 @@ export async function createSubmission(data: {
     await adjustAllGpFontSizes(sheetTitle, rows);
   } catch (_) {}
 
-  // 3. Check if DIO already has a row on the SAME DATE in this sheet
-  // Rule: A DIO name cannot appear twice on the same date; GP names merge with '+' and amounts add up
+  // 3. Check if DEO already has a row on the SAME DATE in this sheet
+  // Rule: A DEO name cannot appear twice on the same date; GP names merge with '+' and amounts add up
   let existingRowIndex = -1;
   let existingRow: string[] | null = null;
 
@@ -142,10 +142,10 @@ export async function createSubmission(data: {
     const r = rows[i];
     if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
       const rowDate = toDDMMYYYY(r[1] || '');
-      const rowDioName = (r[2] || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const searchDioName = dioName.toLowerCase().replace(/\s+/g, ' ');
+      const rowDeoName = (r[2] || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const searchDeoName = deoName.toLowerCase().replace(/\s+/g, ' ');
 
-      if (rowDate === formattedDate && rowDioName === searchDioName) {
+      if (rowDate === formattedDate && rowDeoName === searchDeoName) {
         existingRowIndex = i + 1; // Google Sheets row number (1-indexed)
         existingRow = r;
         break;
@@ -185,7 +185,7 @@ export async function createSubmission(data: {
     const updatedRow = [
       existingSlNo,
       formattedDate,
-      dioName,
+      deoName,
       finalGpNames,
       updatedDay,
       updatedNight,
@@ -238,7 +238,7 @@ export async function createSubmission(data: {
     const newRow = [
       nextSlNo,
       formattedDate,
-      dioName,
+      deoName,
       newGpNames,
       dayAmount,
       nightAmount,
@@ -298,7 +298,7 @@ export async function createSubmission(data: {
   rowsToInsert.push([
     1,
     formattedDate,
-    dioName,
+    deoName,
     newGpNames,
     dayAmount,
     nightAmount,
@@ -334,7 +334,7 @@ export async function createSubmission(data: {
         [
           1,
           formattedDate,
-          dioName,
+          deoName,
           newGpNames,
           dayAmount,
           nightAmount,
@@ -444,7 +444,7 @@ export async function updateSubmission(
 
     // In-place update within same date section and same sheet
     const formattedDate = newFormattedDate;
-    const dioName = normalizeName(data.name);
+    const deoName = normalizeName(data.name);
     const mobile = data.mobile ? data.mobile.trim() : '';
 
     const dayAmount = data.items
@@ -465,7 +465,7 @@ export async function updateSubmission(
     const updatedRow = [
       slNo,
       formattedDate,
-      dioName,
+      deoName,
       gpNames,
       dayAmount,
       nightAmount,
@@ -541,7 +541,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
     rows.forEach((r, idx) => {
       const rowIndex = idx + 1;
       if (!r || r.length < 2) return;
-      if (r[0] === 'SL NO.' || r[1] === 'DATE' || r[2] === 'DIO NAME' || r[0]?.includes('M M S B Y')) return;
+      if (r[0] === 'SL NO.' || r[1] === 'DATE' || r[2] === 'DIO NAME' || r[2] === 'DEO NAME' || r[0]?.includes('M M S B Y')) return;
 
       const slNo = parseInt(r[0], 10) || 0;
       const date = r[1]?.trim() || '';
@@ -660,7 +660,7 @@ export async function getSubmission(id: string) {
   }
 }
 
-export async function getKnownDioNames(): Promise<string[]> {
+export async function getKnownDeoNames(): Promise<string[]> {
   try {
     const entryRows = await getSheetValues('Entry', 'C3:C100');
     const verifiedRows = await getSheetValues('Verified', 'C3:C100');
@@ -668,7 +668,7 @@ export async function getKnownDioNames(): Promise<string[]> {
 
     [...entryRows, ...verifiedRows].forEach(r => {
       const name = r?.[0]?.trim();
-      if (name && name !== 'DIO NAME' && !name.includes('M M S B Y') && name.length >= 2) {
+      if (name && name !== 'DIO NAME' && name !== 'DEO NAME' && !name.includes('M M S B Y') && name.length >= 2) {
         names.add(normalizeName(name));
       }
     });
@@ -678,3 +678,5 @@ export async function getKnownDioNames(): Promise<string[]> {
     return [];
   }
 }
+
+export const getKnownDioNames = getKnownDeoNames;

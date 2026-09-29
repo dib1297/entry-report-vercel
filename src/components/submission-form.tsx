@@ -26,7 +26,7 @@ const GP_LIST = [
 
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
-  name: z.string().min(1, 'DIO Name is required').trim(),
+  name: z.string().min(1, 'DEO Name is required').trim(),
   mobile: z.string().optional().refine(val => !val || /^[0-9]{10}$/.test(val), { message: 'Must be a valid 10-digit mobile number' }),
   recordType: z.enum(['ENTRY', 'VERIFY']),
   items: z.array(z.object({
@@ -43,12 +43,12 @@ export default function SubmissionForm({
   initialData, 
   isEditing = false, 
   editId,
-  knownDioNames = []
+  knownDeoNames = []
 }: { 
   initialData?: FormValues, 
   isEditing?: boolean, 
   editId?: string,
-  knownDioNames?: string[]
+  knownDeoNames?: string[]
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -147,9 +147,9 @@ export default function SubmissionForm({
         {/* Sequential Details List: Name -> Date -> Record Type */}
         <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-200 bg-white text-sm">
           
-          {/* 1. DIO Name */}
+          {/* 1. DEO Name */}
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-white">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">DIO Name</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">DEO Name</span>
             <span className="font-bold text-gray-900 text-base">{previewData.name}</span>
           </div>
 
@@ -281,22 +281,22 @@ export default function SubmissionForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DIO NAME</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO NAME</label>
           <input 
             type="text" 
-            list="known-dios-list"
+            list="known-deos-list"
             autoComplete="off"
-            placeholder="Enter or select DIO name"
+            placeholder="Enter or select DEO name"
             {...register('name')}
             className={cn(
               "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
               errors.name ? "border-rose-400" : "border-gray-300"
             )}
           />
-          {knownDioNames.length > 0 && (
-            <datalist id="known-dios-list">
-              {knownDioNames.map(dio => (
-                <option key={dio} value={dio} />
+          {knownDeoNames.length > 0 && (
+            <datalist id="known-deos-list">
+              {knownDeoNames.map(deo => (
+                <option key={deo} value={deo} />
               ))}
             </datalist>
           )}

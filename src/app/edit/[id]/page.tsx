@@ -1,4 +1,4 @@
-import { getSubmission, getKnownDioNames } from "@/app/actions/submissions";
+import { getSubmission, getKnownDeoNames } from "@/app/actions/submissions";
 import SubmissionForm from "@/components/submission-form";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -6,9 +6,9 @@ import { ArrowLeft } from "lucide-react";
 
 export default async function EditRecordPage(props: { params: Promise<{ id: string }> | { id: string } }) {
   const resolvedParams = await props.params;
-  const [submission, knownDioNames] = await Promise.all([
+  const [submission, knownDeoNames] = await Promise.all([
     getSubmission(resolvedParams.id),
-    getKnownDioNames()
+    getKnownDeoNames()
   ]);
 
   if (!submission) {
@@ -53,7 +53,7 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
         initialData={initialData} 
         isEditing={true} 
         editId={submission.id} 
-        knownDioNames={knownDioNames} 
+        knownDeoNames={knownDeoNames} 
       />
     </div>
   );
