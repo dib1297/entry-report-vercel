@@ -26,8 +26,11 @@ const HEADER_ROW = [
   "TOTAL (UPLOADING)",
   "REJECT",
   "MOBILE",
-  "WORK F HOME"
+  "WORK F HOME",
+  "TIMESTAMP"
 ];
+
+const THIRTY_MINUTES_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 function safeRevalidate() {
   try {
@@ -210,7 +213,8 @@ export async function createSubmission(data: {
       updatedTotal,
       updatedReject,
       updatedMobile,
-      existingWorkFHome
+      existingWorkFHome,
+      new Date().toISOString()
     ];
 
     await updateSheetRow(sheetTitle, existingRowIndex, updatedRow);
@@ -263,7 +267,8 @@ export async function createSubmission(data: {
       totalAmount,
       rejectAmount,
       mobile,
-      ''
+      '',
+      new Date().toISOString()
     ];
 
     if (lastRowIndexForThisDate < rows.length) {
@@ -323,7 +328,8 @@ export async function createSubmission(data: {
     totalAmount,
     rejectAmount,
     mobile,
-    ''
+    '',
+    new Date().toISOString()
   ]);
 
   if (firstLaterRowIndex > 0) {
@@ -359,7 +365,8 @@ export async function createSubmission(data: {
           totalAmount,
           rejectAmount,
           mobile,
-          ''
+          '',
+          new Date().toISOString()
         ]
       ]);
       try {
@@ -496,8 +503,27 @@ export async function updateSubmission(
     const rejectAmount = data.items.reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
     const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
 
-    const currentRows = await getSheetValues(originalSheetTitle, `A${targetRowIdx}:J${targetRowIdx}`);
+    const currentRows = await getSheetValues(originalSheetTitle, `A${targetRowIdx}:K${targetRowIdx}`);
     const slNo = currentRows[0]?.[0] || 1;
+
+    // 30 MINUTE WINDOW: Verify submission time
+    const rawTimestamp = currentRows[0]?.[10]?.trim();
+    let submittedAt: number | null = null;
+    if (rawTimestamp) {
+      const parsed = Date.parse(rawTimestamp);
+      if (!isNaN(parsed)) submittedAt = parsed;
+      else {
+        const num = Number(rawTimestamp);
+        if (!isNaN(num) && num > 0) submittedAt = num;
+      }
+    }
+    if (submittedAt && (Date.now() - submittedAt > THIRTY_MINUTES_MS)) {
+      return {
+        success: false,
+        error: 'রিপোর্ট সাবমিট করার ৩০ মিনিট পার হয়ে গেছে। এটি আর এডিট করা যাবে না।'
+      };
+    }
+    const originalTimestamp = rawTimestamp || new Date().toISOString();
 
     const updatedRow = [
       slNo,
@@ -509,7 +535,8 @@ export async function updateSubmission(
       totalAmount,
       rejectAmount,
       mobile,
-      ''
+      '',
+      originalTimestamp
     ];
 
     await updateSheetRow(originalSheetTitle, targetRowIdx, updatedRow);
@@ -532,9 +559,9 @@ export async function deleteSubmission(id: string) {
     let rowIndex = parseInt(rowIndexStr, 10);
     const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const rows = await getSheetValues(sheetTitle, 'A1:J');
+    const rows = await getSheetValues(sheetTitle, 'A1:K');
     let targetRowIdx = rowIndex;
-    const targetRow = rows[targetRowIdx - 1];
+    let targetRow = rows[targetRowIdx - 1];
     const matches = targetRow && 
       toDDMMYYYY(targetRow[1]) === toDDMMYYYY(date) && 
       normalizeName(targetRow[2]) === normalizeName(name);
@@ -546,9 +573,28 @@ export async function deleteSubmission(id: string) {
       });
       if (foundIdx !== -1) {
         targetRowIdx = foundIdx + 1;
+        targetRow = rows[foundIdx];
       } else {
         return { success: false, error: 'Record could not be located in sheet to delete.' };
       }
+    }
+
+    // 30 MINUTE WINDOW: Verify submission time
+    const rawTimestamp = targetRow[10]?.trim();
+    let submittedAt: number | null = null;
+    if (rawTimestamp) {
+      const parsed = Date.parse(rawTimestamp);
+      if (!isNaN(parsed)) submittedAt = parsed;
+      else {
+        const num = Number(rawTimestamp);
+        if (!isNaN(num) && num > 0) submittedAt = num;
+      }
+    }
+    if (submittedAt && (Date.now() - submittedAt > THIRTY_MINUTES_MS)) {
+      return {
+        success: false,
+        error: 'রিপোর্ট সাবমিট করার ৩০ মিনিট পার হয়ে গেছে। এটি আর ডিলিট করা যাবে না।'
+      };
     }
 
     await deleteSheetRow(sheetTitle, targetRowIdx);
@@ -574,7 +620,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
   const queryMobile = query?.mobile ? query.mobile.trim().replace(/\D/g, '') : '';
 
   for (const sheetTitle of titlesToFetch) {
-    const rows = await getSheetValues(sheetTitle, 'A1:J');
+    const rows = await getSheetValues(sheetTitle, 'A1:K');
     const recType = sheetTitle === 'Entry' ? 'ENTRY' : 'VERIFY';
 
     rows.forEach((r, idx) => {
@@ -591,8 +637,36 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
       const total = Number(r[6]) || 0;
       const reject = Number(r[7]) || 0;
       const mobile = r[8]?.trim() || '';
+      const rawTimestamp = r[10]?.trim() || '';
 
       if (!date || !name) return;
+
+      // 30 MINUTE WINDOW: Only show reports submitted within the last 30 minutes!
+      let submittedAt: number | null = null;
+      if (rawTimestamp) {
+        const parsed = Date.parse(rawTimestamp);
+        if (!isNaN(parsed)) {
+          submittedAt = parsed;
+        } else {
+          const num = Number(rawTimestamp);
+          if (!isNaN(num) && num > 0) submittedAt = num;
+        }
+      }
+
+      const now = Date.now();
+      if (submittedAt) {
+        const ageMs = now - submittedAt;
+        if (ageMs > THIRTY_MINUTES_MS) {
+          // More than 30 minutes old -> DO NOT SHOW
+          return;
+        }
+      } else {
+        // Fallback for older rows without timestamp: only show if created today
+        const todayStr = toDDMMYYYY(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+        if (toDDMMYYYY(date) !== todayStr) {
+          return;
+        }
+      }
 
       // Filter by Name and/or Mobile
       if (queryName && queryMobile) {
@@ -614,9 +688,11 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
       if (queryDate && toDDMMYYYY(date) !== queryDate) return;
       if (query?.recordType && query.recordType !== 'All' && query.recordType !== recType) return;
 
+      const editUntilTime = submittedAt ? (submittedAt + THIRTY_MINUTES_MS) : (now + THIRTY_MINUTES_MS);
+      const remainingMinutes = Math.max(1, Math.ceil((editUntilTime - now) / 60000));
+
       const uiId = Buffer.from(`${recType}|${rowIndex}|${date}|${name}`).toString('base64url');
       const items = parseSheetRowToItems(gpName, day, night, reject);
-      const now = new Date();
 
       results.push({
         id: uiId,
@@ -635,7 +711,8 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
         items,
         createdAt: now,
         isEditable: true,
-        editUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+        remainingMinutes,
+        editUntil: new Date(editUntilTime)
       });
     });
   }
@@ -658,7 +735,7 @@ export async function getSubmission(id: string) {
     let rowIndex = parseInt(rowIndexStr, 10);
     const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const rows = await getSheetValues(sheetTitle, 'A1:J');
+    const rows = await getSheetValues(sheetTitle, 'A1:K');
     let targetRowIdx = rowIndex;
     let r: string[] | null = rows[targetRowIdx - 1] || null;
     const matches = r && 
@@ -680,6 +757,27 @@ export async function getSubmission(id: string) {
 
     if (!r || r.length < 2) return null;
 
+    const rawTimestamp = r[10]?.trim();
+    let submittedAt: number | null = null;
+    if (rawTimestamp) {
+      const parsed = Date.parse(rawTimestamp);
+      if (!isNaN(parsed)) submittedAt = parsed;
+      else {
+        const num = Number(rawTimestamp);
+        if (!isNaN(num) && num > 0) submittedAt = num;
+      }
+    }
+
+    const now = Date.now();
+    if (submittedAt && (now - submittedAt > THIRTY_MINUTES_MS)) {
+      return {
+        id,
+        expired: true,
+        displayDate: toDDMMYYYY(r[1]) || r[1],
+        name: r[2],
+      } as any;
+    }
+
     const slNo = parseInt(r[0], 10) || 0;
     const rowDate = r[1]?.trim() || '';
     const rowName = r[2]?.trim() || '';
@@ -691,7 +789,8 @@ export async function getSubmission(id: string) {
     const mobile = r[8]?.trim() || '';
 
     const items = parseSheetRowToItems(gpName, day, night, reject);
-    const now = new Date();
+    const editUntilTime = submittedAt ? (submittedAt + THIRTY_MINUTES_MS) : (now + THIRTY_MINUTES_MS);
+    const remainingMinutes = Math.max(1, Math.ceil((editUntilTime - now) / 60000));
 
     return {
       id,
@@ -709,7 +808,8 @@ export async function getSubmission(id: string) {
       recordType: recType as 'ENTRY' | 'VERIFY',
       items,
       createdAt: now,
-      editUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      remainingMinutes,
+      editUntil: new Date(editUntilTime)
     };
   } catch (e) {
     return null;
@@ -735,4 +835,6 @@ export async function getKnownDeoNames(): Promise<string[]> {
   }
 }
 
-export const getKnownDioNames = getKnownDeoNames;
+export async function getKnownDioNames(): Promise<string[]> {
+  return getKnownDeoNames();
+}

@@ -202,6 +202,11 @@ export default async function OldRecordsPage(props: {
                   </div>
                   
                   <div className="flex items-center gap-2 justify-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                    {typeof sub.remainingMinutes === 'number' && (
+                      <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md flex items-center gap-1 shrink-0">
+                        ⏱️ {sub.remainingMinutes}m left
+                      </span>
+                    )}
                     <Link 
                       href={`/edit/${sub.id}`} 
                       className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1 shadow-xs"

@@ -26,16 +26,22 @@ export async function getGoogleDoc() {
   return doc;
 }
 
-export async function getSheetValues(sheetTitle: string, range: string = 'A1:J'): Promise<string[][]> {
+export async function getSheetValues(sheetTitle: string, range: string = 'A1:K'): Promise<string[][]> {
   const { auth, spreadsheetId } = getSheetsAuth();
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!${range}`)}`;
-  const res: any = await auth.request({ url });
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!${range}`)}?valueRenderOption=FORMATTED_VALUE`;
+  const res: any = await auth.request({ 
+    url,
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+    }
+  });
   return res.data?.values || [];
 }
 
 export async function appendSheetRows(sheetTitle: string, values: any[][]) {
   const { auth, spreadsheetId } = getSheetsAuth();
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A:J`)}:append?valueInputOption=USER_ENTERED`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A:K`)}:append?valueInputOption=USER_ENTERED`;
   const res: any = await auth.request({
     url,
     method: 'POST',
@@ -46,7 +52,7 @@ export async function appendSheetRows(sheetTitle: string, values: any[][]) {
 
 export async function updateSheetRow(sheetTitle: string, rowIndex: number, rowValues: any[]) {
   const { auth, spreadsheetId } = getSheetsAuth();
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:J${rowIndex}`)}?valueInputOption=USER_ENTERED`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:K${rowIndex}`)}?valueInputOption=USER_ENTERED`;
   const res: any = await auth.request({
     url,
     method: 'PUT',
@@ -87,7 +93,7 @@ export async function insertSheetRows(sheetTitle: string, rowIndex: number, rows
   });
 
   const endRowIndex = rowIndex + count - 1;
-  const urlValues = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:J${endRowIndex}`)}?valueInputOption=USER_ENTERED`;
+  const urlValues = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:K${endRowIndex}`)}?valueInputOption=USER_ENTERED`;
   const res: any = await auth.request({
     url: urlValues,
     method: 'PUT',
