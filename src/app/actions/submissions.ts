@@ -2,7 +2,7 @@
 
 import { normalizeName } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
-import { getSession } from '@/lib/auth';
+import { getSession, fetchUsersFromGoogleSheet } from '@/lib/auth';
 import { 
   getSheetValues, 
   appendSheetRows, 
@@ -100,8 +100,24 @@ export async function createSubmission(data: {
   const sheetTitle = data.recordType === 'ENTRY' ? 'Entry' : 'Verified';
   const formattedDate = toDDMMYYYY(data.date);
   const session = await getSession();
-  const deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
-  const mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
+  let deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
+  let mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
+
+  // Live real-time sync with Google Sheet
+  if (mobile) {
+    try {
+      const liveUsers = await fetchUsersFromGoogleSheet();
+      const currentLive = liveUsers.find(u => u.mobile === mobile);
+      if (currentLive) {
+        if (currentLive.access === 'NO') {
+          return { success: false, error: 'Your account access has been revoked in Google Sheet.' };
+        }
+        if (currentLive.name) {
+          deoName = normalizeName(currentLive.name);
+        }
+      }
+    } catch (_) {}
+  }
 
   // 1. Calculate Day & Night totals
   const dayAmount = data.items
@@ -447,8 +463,24 @@ export async function updateSubmission(
     // In-place update within same date section and same sheet
     const formattedDate = newFormattedDate;
     const session = await getSession();
-    const deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
-    const mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
+    let deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
+    let mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
+
+    // Live real-time sync with Google Sheet
+    if (mobile) {
+      try {
+        const liveUsers = await fetchUsersFromGoogleSheet();
+        const currentLive = liveUsers.find(u => u.mobile === mobile);
+        if (currentLive) {
+          if (currentLive.access === 'NO') {
+            return { success: false, error: 'Your account access has been revoked in Google Sheet.' };
+          }
+          if (currentLive.name) {
+            deoName = normalizeName(currentLive.name);
+          }
+        }
+      } catch (_) {}
+    }
 
     const dayAmount = data.items
       .filter(item => item.shift === 'DAY')

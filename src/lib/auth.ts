@@ -49,11 +49,17 @@ export function cleanMobile(num: any): string {
 export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
   const { auth, spreadsheetId } = getAuthSheetsClient();
 
-  // 1. Fetch spreadsheet metadata to get the first sheet's title
+  // 1. Fetch spreadsheet metadata to get the first sheet's title (no-cache)
   let sheetTitle = 'Sheet1';
   try {
     const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
-    const metaRes: any = await auth.request({ url: metaUrl });
+    const metaRes: any = await auth.request({ 
+      url: metaUrl,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      }
+    });
     if (metaRes.data?.sheets?.length > 0) {
       sheetTitle = metaRes.data.sheets[0].properties.title;
     }
@@ -62,9 +68,15 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
     throw err;
   }
 
-  // 2. Fetch rows from the sheet
-  const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A1:Z500`)}`;
-  const valuesRes: any = await auth.request({ url: valuesUrl });
+  // 2. Fetch rows from the sheet (live, always fresh)
+  const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A1:Z`)}?valueRenderOption=FORMATTED_VALUE`;
+  const valuesRes: any = await auth.request({ 
+    url: valuesUrl,
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+    }
+  });
   const rows: string[][] = valuesRes.data?.values || [];
   if (rows.length === 0) return [];
 
