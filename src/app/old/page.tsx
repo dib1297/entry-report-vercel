@@ -15,9 +15,9 @@ export default async function OldRecordsPage(props: {
     getSession(),
   ]);
 
-  // If user is logged in, their name and mobile are FIXED to their login session!
-  const name = sessionUser?.name || (typeof resolvedParams?.name === 'string' ? resolvedParams.name.trim() : '');
-  const mobile = sessionUser?.mobile || (typeof resolvedParams?.mobile === 'string' ? resolvedParams.mobile.trim() : '');
+  // Default name and mobile to session user, but allow search overrides
+  const name = typeof resolvedParams?.name === 'string' ? resolvedParams.name.trim() : (sessionUser?.name || '');
+  const mobile = typeof resolvedParams?.mobile === 'string' ? resolvedParams.mobile.trim() : (sessionUser?.mobile || '');
   const date = typeof resolvedParams?.date === 'string' ? resolvedParams.date.trim() : '';
   const recordType = typeof resolvedParams?.recordType === 'string' ? resolvedParams.recordType : '';
   const isUpdated = Boolean(resolvedParams?.updated);
@@ -49,7 +49,7 @@ export default async function OldRecordsPage(props: {
               <ShieldCheck size={13} /> Protected
             </span>
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Enter your DEO name or mobile number to search and edit submissions.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Search records by DEO name, mobile number, or date to view and edit.</p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Link
@@ -73,50 +73,28 @@ export default async function OldRecordsPage(props: {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO Name</label>
-              {sessionUser && (
-                <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
-                  <Lock size={10} /> Fixed
-                </span>
-              )}
             </div>
             <input 
               name="name" 
               type="text" 
-              readOnly={!!sessionUser}
               autoComplete="off"
               defaultValue={name}
               placeholder="Enter DEO name..."
-              className={cn(
-                "w-full px-3.5 py-2 rounded-lg border text-sm transition-colors",
-                sessionUser 
-                  ? "bg-gray-100 text-gray-700 font-semibold cursor-not-allowed border-gray-300 select-none shadow-inner" 
-                  : "bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600"
-              )}
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
             />
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile No.</label>
-              {sessionUser && (
-                <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
-                  <Lock size={10} /> Fixed
-                </span>
-              )}
             </div>
             <input 
               name="mobile" 
               type="tel" 
-              readOnly={!!sessionUser}
               maxLength={10}
               autoComplete="off"
               defaultValue={mobile}
               placeholder="Enter 10-digit mobile..."
-              className={cn(
-                "w-full px-3.5 py-2 rounded-lg border text-sm transition-colors",
-                sessionUser 
-                  ? "bg-gray-100 text-gray-700 font-semibold cursor-not-allowed border-gray-300 select-none shadow-inner" 
-                  : "bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600"
-              )}
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
             />
           </div>
           <div className="space-y-1.5">

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { canonicalGp } from "@/lib/utils";
 
 export default async function EditRecordPage(props: { params: Promise<{ id: string }> | { id: string } }) {
   const resolvedParams = await props.params;
@@ -23,12 +24,14 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
     name: submission.name,
     mobile: submission.mobile || '',
     recordType: submission.recordType as 'ENTRY' | 'VERIFY',
-    items: submission.items.map((item: any) => ({
-      gpName: item.gpName,
-      shift: item.shift as 'DAY' | 'NIGHT',
-      amount: item.amount,
-      problemAmount: item.problemAmount,
-    })),
+    items: submission.items && submission.items.length > 0
+      ? submission.items.map((item: any) => ({
+          gpName: canonicalGp(item.gpName),
+          shift: item.shift as 'DAY' | 'NIGHT',
+          amount: item.amount,
+          problemAmount: item.problemAmount,
+        }))
+      : [{ gpName: '', shift: 'DAY' as const, amount: 0, problemAmount: 0 }],
   };
 
   return (

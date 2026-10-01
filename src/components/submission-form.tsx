@@ -7,22 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check, Lock } from 'lucide-react';
 import { createSubmission, updateSubmission } from '@/app/actions/submissions';
 import { useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
-
-const GP_LIST = [
-  "BAMANHAT – I",
-  "BAMANHAT – II",
-  "BARA SAKDAL",
-  "BURIRHAT – I",
-  "BURIRHAT – II",
-  "CHOWDHURYHAT",
-  "GOBRACHHARA NAYARHAT",
-  "KISMAT DASGRAM",
-  "NAZIRHAT – I",
-  "NAZIRHAT – II",
-  "SAHEBGANJ",
-  "SUKARURKUTHI"
-];
+import { cn, GP_LIST, canonicalGp } from '@/lib/utils';
 
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -73,8 +58,11 @@ export default function SubmissionForm({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
       ...initialData,
-      name: currentUser?.name || initialData.name,
-      mobile: currentUser?.mobile || initialData.mobile,
+      name: isEditing ? initialData.name : (currentUser?.name || initialData.name),
+      mobile: isEditing ? (initialData.mobile || currentUser?.mobile || '') : (currentUser?.mobile || initialData.mobile),
+      items: initialData.items && initialData.items.length > 0 
+        ? initialData.items.map(it => ({ ...it, gpName: canonicalGp(it.gpName) })) 
+        : [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
     } : {
       date: defaultDate,
       name: effectiveInitialName,
@@ -413,14 +401,21 @@ export default function SubmissionForm({
                   )}
                 >
                   <option value="">-- Select Gram Panchayat --</option>
-                  {GP_LIST.map(gp => {
-                    const isSelectedElsewhere = watchItems?.some((it, i) => i !== index && it?.gpName === gp);
-                    return (
-                      <option key={gp} value={gp} disabled={isSelectedElsewhere}>
-                        {gp} {isSelectedElsewhere ? '(Already selected)' : ''}
-                      </option>
-                    );
-                  })}
+                  {(() => {
+                    const currentGp = watchItems?.[index]?.gpName;
+                    const allGps = [...GP_LIST];
+                    if (currentGp && !allGps.includes(currentGp)) {
+                      allGps.push(currentGp);
+                    }
+                    return allGps.map(gp => {
+                      const isSelectedElsewhere = watchItems?.some((it, i) => i !== index && it?.gpName === gp);
+                      return (
+                        <option key={gp} value={gp} disabled={isSelectedElsewhere}>
+                          {gp} {isSelectedElsewhere ? '(Already selected)' : ''}
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
                 {errors.items?.[index]?.gpName && <p className="text-rose-600 text-xs font-medium">{errors.items?.[index]?.gpName?.message}</p>}
               </div>
@@ -499,9 +494,9 @@ export default function SubmissionForm({
       <div className="pt-2">
         <button
           type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-xs transition-colors flex justify-center items-center gap-2 text-base"
+          className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 px-6 rounded-lg shadow-xs transition-colors flex justify-center items-center gap-2 text-base cursor-pointer"
         >
-          <Eye size={18} /> Review & Submit Record
+          <Eye size={18} /> {isEditing ? 'Review & Update Record' : 'Review & Submit Record'}
         </button>
       </div>
     </form>

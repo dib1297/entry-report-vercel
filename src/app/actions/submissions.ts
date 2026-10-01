@@ -1,6 +1,6 @@
 'use server';
 
-import { normalizeName } from '@/lib/utils';
+import { normalizeName, canonicalGp } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
 import { getSession, fetchUsersFromGoogleSheet } from '@/lib/auth';
 import { 
@@ -376,7 +376,7 @@ export async function createSubmission(data: {
 }
 
 function parseSheetRowToItems(gpName: string, day: number, night: number, reject: number) {
-  const gpParts = (gpName || '').split('+').map(g => g.trim()).filter(Boolean);
+  const gpParts = (gpName || '').split('+').map(g => canonicalGp(g.trim())).filter(Boolean);
   const items: { gpName: string; shift: 'DAY' | 'NIGHT'; amount: number; problemAmount: number }[] = [];
 
   if (gpParts.length === 0) {
@@ -445,6 +445,8 @@ export async function updateSubmission(
       });
       if (foundIdx !== -1) {
         targetRowIdx = foundIdx + 1;
+      } else {
+        return { success: false, error: 'Original record could not be found in Google Sheet to update.' };
       }
     }
 
@@ -463,8 +465,8 @@ export async function updateSubmission(
     // In-place update within same date section and same sheet
     const formattedDate = newFormattedDate;
     const session = await getSession();
-    let deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
-    let mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
+    let deoName = data.name ? normalizeName(data.name) : (session?.name ? normalizeName(session.name) : '');
+    let mobile = data.mobile ? data.mobile.trim() : (session?.mobile ? session.mobile.trim() : '');
 
     // Live real-time sync with Google Sheet
     if (mobile) {
@@ -544,6 +546,8 @@ export async function deleteSubmission(id: string) {
       });
       if (foundIdx !== -1) {
         targetRowIdx = foundIdx + 1;
+      } else {
+        return { success: false, error: 'Record could not be located in sheet to delete.' };
       }
     }
 
@@ -590,9 +594,24 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
 
       if (!date || !name) return;
 
-      if (queryName && !name.toLowerCase().includes(queryName)) return;
-      if (queryDate && date !== queryDate) return;
-      if (queryMobile && !mobile.replace(/\D/g, '').includes(queryMobile)) return;
+      // Filter by Name and/or Mobile
+      if (queryName && queryMobile) {
+        const normRowName = name.toLowerCase().replace(/\s+/g, '');
+        const normQueryName = queryName.toLowerCase().replace(/\s+/g, '');
+        const nameMatches = normRowName.includes(normQueryName) || normQueryName.includes(normRowName);
+        const cleanRowMobile = mobile.replace(/\D/g, '');
+        const mobileMatches = Boolean(cleanRowMobile && (cleanRowMobile.includes(queryMobile) || queryMobile.includes(cleanRowMobile)));
+        if (!nameMatches && !mobileMatches) return;
+      } else if (queryName) {
+        const normRowName = name.toLowerCase().replace(/\s+/g, '');
+        const normQueryName = queryName.toLowerCase().replace(/\s+/g, '');
+        if (!normRowName.includes(normQueryName) && !normQueryName.includes(normRowName)) return;
+      } else if (queryMobile) {
+        const cleanRowMobile = mobile.replace(/\D/g, '');
+        if (!cleanRowMobile.includes(queryMobile)) return;
+      }
+
+      if (queryDate && toDDMMYYYY(date) !== queryDate) return;
       if (query?.recordType && query.recordType !== 'All' && query.recordType !== recType) return;
 
       const uiId = Buffer.from(`${recType}|${rowIndex}|${date}|${name}`).toString('base64url');
@@ -604,7 +623,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
         rowIndex,
         slNo,
         date: toYYYYMMDD(date),
-        displayDate: date,
+        displayDate: toDDMMYYYY(date) || date,
         name,
         mobile,
         gpName,
@@ -641,7 +660,7 @@ export async function getSubmission(id: string) {
 
     const rows = await getSheetValues(sheetTitle, 'A1:J');
     let targetRowIdx = rowIndex;
-    let r = rows[targetRowIdx - 1];
+    let r: string[] | null = rows[targetRowIdx - 1] || null;
     const matches = r && 
       toDDMMYYYY(r[1]) === toDDMMYYYY(date) && 
       normalizeName(r[2]) === normalizeName(name);
@@ -654,6 +673,8 @@ export async function getSubmission(id: string) {
       if (foundIdx !== -1) {
         targetRowIdx = foundIdx + 1;
         r = rows[foundIdx];
+      } else {
+        r = null;
       }
     }
 
