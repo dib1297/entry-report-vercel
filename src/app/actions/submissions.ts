@@ -13,7 +13,8 @@ import {
   formatRowLikeHeader,
   adjustGpCellFontSize,
   adjustAllGpFontSizes,
-  formatDataRow
+  formatDataRow,
+  clearColumnL
 } from '@/lib/google-sheets';
 
 const HEADER_ROW = [
@@ -27,8 +28,7 @@ const HEADER_ROW = [
   "REJECT",
   "MOBILE",
   "WORK F HOME QTY",
-  "WORK F HOME GP",
-  "TIMESTAMP"
+  "WORK F HOME GP"
 ];
 
 function extractRowData(r: string[]) {
@@ -287,8 +287,7 @@ export async function createSubmission(data: {
       updatedReject,
       updatedMobile,
       updatedWfhQty > 0 ? updatedWfhQty : '',
-      finalWfhGp,
-      new Date().toISOString()
+      finalWfhGp
     ];
 
     await updateSheetRow(sheetTitle, existingRowIndex, updatedRow);
@@ -342,8 +341,7 @@ export async function createSubmission(data: {
       rejectAmount,
       mobile,
       wfhQtyVal,
-      wfhGpVal,
-      new Date().toISOString()
+      wfhGpVal
     ];
 
     if (lastRowIndexForThisDate < rows.length) {
@@ -404,8 +402,7 @@ export async function createSubmission(data: {
     rejectAmount,
     mobile,
     wfhQtyVal,
-    wfhGpVal,
-    new Date().toISOString()
+    wfhGpVal
   ]);
 
   if (firstLaterRowIndex > 0) {
@@ -442,8 +439,7 @@ export async function createSubmission(data: {
           rejectAmount,
           mobile,
           wfhQtyVal,
-          wfhGpVal,
-          new Date().toISOString()
+          wfhGpVal
         ]
       ]);
       try {
@@ -621,8 +617,7 @@ export async function updateSubmission(
       rejectAmount,
       mobile,
       wfhQtyVal,
-      wfhGpVal,
-      originalTimestamp
+      wfhGpVal
     ];
 
     await updateSheetRow(originalSheetTitle, targetRowIdx, updatedRow);
