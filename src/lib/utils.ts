@@ -15,6 +15,7 @@ export function normalizeName(name: string): string {
 }
 
 export const GP_LIST = [
+  "NO ARRIVAL",
   "BAMANHAT – I",
   "BAMANHAT – II",
   "BARA SAKDAL",
