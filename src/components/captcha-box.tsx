@@ -19,7 +19,7 @@ function generateRandomCode(length = 5): string {
 
 export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [currentCode, setCurrentCode] = useState<string>('');
+  const [, setCurrentCode] = useState<string>('');
   const [isRotating, setIsRotating] = useState(false);
 
   const drawCaptcha = useCallback((code: string) => {
@@ -31,67 +31,34 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
     const width = canvas.width;
     const height = canvas.height;
 
-    // Background gradient
-    const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-    bgGrad.addColorStop(0, '#f1f5f9');
-    bgGrad.addColorStop(0.5, '#e2e8f0');
-    bgGrad.addColorStop(1, '#f8fafc');
-    ctx.fillStyle = bgGrad;
+    // Clean light background
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw random noise lines
-    for (let i = 0; i < 4; i++) {
-      ctx.strokeStyle = `rgba(${Math.floor(Math.random() * 120 + 80)}, ${Math.floor(
-        Math.random() * 120 + 80
-      )}, ${Math.floor(Math.random() * 120 + 80)}, 0.45)`;
-      ctx.lineWidth = Math.random() * 1.5 + 1;
-      ctx.beginPath();
-      ctx.moveTo(Math.random() * width, Math.random() * height);
-      ctx.bezierCurveTo(
-        Math.random() * width,
-        Math.random() * height,
-        Math.random() * width,
-        Math.random() * height,
-        Math.random() * width,
-        Math.random() * height
-      );
-      ctx.stroke();
-    }
+    // Subtle line
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(10, Math.random() * height);
+    ctx.lineTo(width - 10, Math.random() * height);
+    ctx.stroke();
 
-    // Draw random noise dots
-    for (let i = 0; i < 35; i++) {
-      ctx.fillStyle = `rgba(${Math.floor(Math.random() * 150)}, ${Math.floor(
-        Math.random() * 150
-      )}, ${Math.floor(Math.random() * 150)}, 0.4)`;
-      ctx.beginPath();
-      ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Draw characters
+    // Draw characters cleanly
     const charSpacing = width / (code.length + 1);
     ctx.textBaseline = 'middle';
-
-    const colors = ['#1e293b', '#0f172a', '#1e3a8a', '#0369a1', '#047857', '#b45309', '#6d28d9'];
+    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+    ctx.fillStyle = '#1e293b';
 
     for (let i = 0; i < code.length; i++) {
       const char = code[i];
       ctx.save();
       const x = charSpacing * (i + 1);
-      const y = height / 2 + (Math.random() * 6 - 3);
-      const angle = (Math.random() * 26 - 13) * (Math.PI / 180);
+      const y = height / 2;
+      const angle = (Math.random() * 16 - 8) * (Math.PI / 180);
 
       ctx.translate(x, y);
       ctx.rotate(angle);
-
-      ctx.font = `bold ${Math.floor(Math.random() * 4 + 22)}px "Courier New", monospace`;
-      ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
-      ctx.shadowBlur = 2;
-      ctx.shadowOffsetX = 1;
-      ctx.shadowOffsetY = 1;
-      ctx.fillText(char, -7, 0);
-
+      ctx.fillText(char, -6, 0);
       ctx.restore();
     }
   }, []);
@@ -102,7 +69,7 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
     setCurrentCode(newCode);
     onCodeChange(newCode);
     drawCaptcha(newCode);
-    setTimeout(() => setIsRotating(false), 400);
+    setTimeout(() => setIsRotating(false), 300);
   }, [drawCaptcha, onCodeChange]);
 
   useEffect(() => {
@@ -110,16 +77,16 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
   }, []);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <div 
-        className="relative rounded-lg overflow-hidden border border-gray-300 shadow-inner bg-slate-100 cursor-pointer select-none"
+        className="rounded-lg overflow-hidden border border-gray-300 bg-gray-50 cursor-pointer select-none"
         onClick={refreshCaptcha}
-        title="ক্যাপচা পরিবর্তন করতে ক্লিক করুন"
+        title="Click to refresh captcha"
       >
         <canvas
           ref={canvasRef}
-          width={150}
-          height={44}
+          width={120}
+          height={38}
           className="block"
         />
       </div>
@@ -127,11 +94,11 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
       <button
         type="button"
         onClick={refreshCaptcha}
-        title="নতুন ক্যাপচা কোড আনুন"
+        title="Refresh captcha"
         aria-label="Refresh Captcha"
-        className="p-2.5 rounded-lg border border-gray-300 text-gray-600 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-center shrink-0"
+        className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
       >
-        <RotateCw size={18} className={isRotating ? 'animate-spin' : ''} />
+        <RotateCw size={15} className={isRotating ? 'animate-spin' : ''} />
       </button>
     </div>
   );
