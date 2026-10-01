@@ -29,11 +29,30 @@ export const GP_LIST = [
   "SUKARURKUTHI"
 ];
 
+export const WFH_GP_LIST = [
+  "NO ARRIVAL",
+  "BAMANHAT – I",
+  "BAMANHAT – II",
+  "BARA SAKDAL",
+  "BURIRHAT – I",
+  "BURIRHAT – II",
+  "CHOWDHURYHAT",
+  "GOBRACHHARA NAYARHAT",
+  "KISMAT DASGRAM",
+  "NAZIRHAT – I",
+  "NAZIRHAT – II",
+  "SAHEBGANJ",
+  "SUKARURKUTHI"
+];
+
 export function canonicalGp(raw: string): string {
   if (!raw) return '';
   const trimmed = raw.trim();
   const normalized = trimmed.replace(/[–—−]/g, '-').replace(/\s+/g, ' ').toUpperCase();
-  const match = GP_LIST.find(
+  if (normalized.includes('NO') && (normalized.includes('ARRIVAL') || normalized.includes('ARAIVAL'))) {
+    return 'NO ARRIVAL';
+  }
+  const match = WFH_GP_LIST.find(
     g => g.replace(/[–—−]/g, '-').replace(/\s+/g, ' ').toUpperCase() === normalized
   );
   return match || trimmed;

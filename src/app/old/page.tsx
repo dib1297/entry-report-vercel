@@ -1,6 +1,6 @@
 import { getSubmissions } from "@/app/actions/submissions";
 import Link from "next/link";
-import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle, ShieldCheck, Lock } from "lucide-react";
+import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle, ShieldCheck, Lock, Home } from "lucide-react";
 import DeleteButton from "@/components/delete-button";
 import { getSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -197,6 +197,11 @@ export default async function OldRecordsPage(props: {
                             Rej: {reject}
                           </span>
                         )}
+                        {(sub.workFromHomeQty !== undefined && sub.workFromHomeQty > 0) && (
+                          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.5 rounded">
+                            WFH: {sub.workFromHomeQty}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -233,6 +238,20 @@ export default async function OldRecordsPage(props: {
                       <span className="font-semibold text-gray-700">{sub.recordType === 'ENTRY' ? 'Entry' : 'Verified'} (Row {sub.rowIndex})</span>
                     </div>
                   </div>
+
+                  {(sub.workFromHomeGp || (sub.workFromHomeQty !== undefined && sub.workFromHomeQty > 0)) && (
+                    <div className="mb-3 p-3 rounded-lg bg-blue-50/70 border border-blue-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-blue-900 font-semibold">
+                        <Home size={14} className="text-blue-600" />
+                        <span>Work From Home GP:</span>
+                        <span className="font-bold text-gray-900">{sub.workFromHomeGp || 'NO ARRIVAL'}</span>
+                      </div>
+                      <div className="text-blue-800">
+                        <span>Quantity: </span>
+                        <strong className="text-blue-950 font-bold text-sm">{(sub.workFromHomeQty || 0).toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+                  )}
 
                   <h4 className="font-bold text-gray-700 mb-2 uppercase tracking-wider text-xs">GP Breakdown</h4>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -26,7 +26,7 @@ export async function getGoogleDoc() {
   return doc;
 }
 
-export async function getSheetValues(sheetTitle: string, range: string = 'A1:K'): Promise<string[][]> {
+export async function getSheetValues(sheetTitle: string, range: string = 'A1:L'): Promise<string[][]> {
   const { auth, spreadsheetId } = getSheetsAuth();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!${range}`)}?valueRenderOption=FORMATTED_VALUE`;
   const res: any = await auth.request({ 
@@ -41,7 +41,7 @@ export async function getSheetValues(sheetTitle: string, range: string = 'A1:K')
 
 export async function appendSheetRows(sheetTitle: string, values: any[][]) {
   const { auth, spreadsheetId } = getSheetsAuth();
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A:K`)}:append?valueInputOption=USER_ENTERED`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A:L`)}:append?valueInputOption=USER_ENTERED`;
   const res: any = await auth.request({
     url,
     method: 'POST',
@@ -52,7 +52,7 @@ export async function appendSheetRows(sheetTitle: string, values: any[][]) {
 
 export async function updateSheetRow(sheetTitle: string, rowIndex: number, rowValues: any[]) {
   const { auth, spreadsheetId } = getSheetsAuth();
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:K${rowIndex}`)}?valueInputOption=USER_ENTERED`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:L${rowIndex}`)}?valueInputOption=USER_ENTERED`;
   const res: any = await auth.request({
     url,
     method: 'PUT',
@@ -93,7 +93,7 @@ export async function insertSheetRows(sheetTitle: string, rowIndex: number, rows
   });
 
   const endRowIndex = rowIndex + count - 1;
-  const urlValues = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:K${endRowIndex}`)}?valueInputOption=USER_ENTERED`;
+  const urlValues = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A${rowIndex}:L${endRowIndex}`)}?valueInputOption=USER_ENTERED`;
   const res: any = await auth.request({
     url: urlValues,
     method: 'PUT',
@@ -126,14 +126,14 @@ export async function formatRowLikeHeader(sheetTitle: string, targetRowIndex: nu
               startRowIndex: 1, // Row 2 (0-based index 1)
               endRowIndex: 2,
               startColumnIndex: 0,
-              endColumnIndex: 10,
+              endColumnIndex: 12,
             },
             destination: {
               sheetId: sheetId,
               startRowIndex: targetRowIndex - 1,
               endRowIndex: targetRowIndex,
               startColumnIndex: 0,
-              endColumnIndex: 10,
+              endColumnIndex: 12,
             },
             pasteType: 'PASTE_FORMAT',
           },
@@ -277,7 +277,7 @@ export async function formatDataRow(sheetTitle: string, rowIndex: number) {
               startRowIndex: rowIndex - 1,
               endRowIndex: rowIndex,
               startColumnIndex: 0,
-              endColumnIndex: 10,
+              endColumnIndex: 12,
             },
             cell: {
               userEnteredFormat: {

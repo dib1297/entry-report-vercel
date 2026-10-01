@@ -23,12 +23,68 @@ const HEADER_ROW = [
   "GP NAME",
   "DAY",
   "NIGHT",
-  "TOTAL (UPLOADING)",
+  "TOTAL",
   "REJECT",
   "MOBILE",
-  "WORK F HOME",
+  "WORK F HOME QTY",
+  "WORK F HOME GP",
   "TIMESTAMP"
 ];
+
+function extractRowData(r: string[]) {
+  const slNo = parseInt(r[0], 10) || 0;
+  const date = r[1]?.trim() || '';
+  const name = r[2]?.trim() || '';
+  const gpName = r[3]?.trim() || '';
+  const day = Number(r[4]) || 0;
+  const night = Number(r[5]) || 0;
+  const total = Number(r[6]) || 0;
+  const reject = Number(r[7]) || 0;
+  const mobile = r[8]?.trim() || '';
+
+  let wfhQty: number | undefined = undefined;
+  let wfhGp: string = '';
+  let rawTimestamp: string = '';
+
+  const col9 = r[9]?.trim() || '';
+  const col10 = r[10]?.trim() || '';
+  const col11 = r[11]?.trim() || '';
+
+  if (col11) {
+    rawTimestamp = col11;
+    if (col9 && !isNaN(Number(col9))) wfhQty = Number(col9);
+    wfhGp = canonicalGp(col10);
+  } else if (col10) {
+    if (col10.includes('T') && (col10.includes(':') || col10.endsWith('Z'))) {
+      rawTimestamp = col10;
+      if (col9 && !isNaN(Number(col9))) wfhQty = Number(col9);
+    } else {
+      wfhGp = canonicalGp(col10);
+      if (col9 && !isNaN(Number(col9))) wfhQty = Number(col9);
+    }
+  } else if (col9) {
+    if (col9.includes('T') && (col9.includes(':') || col9.endsWith('Z'))) {
+      rawTimestamp = col9;
+    } else if (!isNaN(Number(col9))) {
+      wfhQty = Number(col9);
+    }
+  }
+
+  return {
+    slNo,
+    date,
+    name,
+    gpName,
+    day,
+    night,
+    total,
+    reject,
+    mobile,
+    workFromHomeQty: wfhQty,
+    workFromHomeGp: wfhGp,
+    rawTimestamp
+  };
+}
 
 const THIRTY_MINUTES_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
 
@@ -93,6 +149,8 @@ export async function createSubmission(data: {
   name: string;
   mobile?: string;
   recordType: string;
+  workFromHomeGp?: string;
+  workFromHomeQty?: number;
   items: {
     gpName: string;
     shift: string;
@@ -136,8 +194,13 @@ export async function createSubmission(data: {
   const rejectAmount = data.items
     .reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
 
+  const wfhQtyVal = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty)) && Number(data.workFromHomeQty) > 0)
+    ? Number(data.workFromHomeQty)
+    : '';
+  const wfhGpVal = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
+
   // 2. Fetch existing rows from the target sheet
-  const rows = await getSheetValues(sheetTitle, 'A1:J');
+  const rows = await getSheetValues(sheetTitle, 'A1:L');
 
   // Ensure any existing repeated header rows in the sheet have exact same styling as Row 2
   for (let i = 2; i < rows.length; i++) {
@@ -176,8 +239,9 @@ export async function createSubmission(data: {
 
   // 4. If existing row on same date is found, update in-place without adding duplicate row
   if (existingRow && existingRowIndex > 0) {
-    const existingSlNo = existingRow[0] || '1';
-    const existingGpRaw = existingRow[3] || '';
+    const existingData = extractRowData(existingRow);
+    const existingSlNo = existingData.slNo || '1';
+    const existingGpRaw = existingData.gpName || '';
     const existingGps = existingGpRaw.split('+').map(g => g.trim()).filter(Boolean);
     const newGps = data.items.map(item => item.gpName?.trim()).filter(Boolean);
 
@@ -191,17 +255,26 @@ export async function createSubmission(data: {
     }
     const finalGpNames = mergedGps.join('+');
 
-    const existingDay = Number(existingRow[4]) || 0;
-    const existingNight = Number(existingRow[5]) || 0;
-    const existingReject = Number(existingRow[7]) || 0;
-    const existingMobile = existingRow[8]?.trim() || '';
-    const existingWorkFHome = existingRow[9] || '';
-
-    const updatedDay = existingDay + dayAmount;
-    const updatedNight = existingNight + nightAmount;
+    const updatedDay = existingData.day + dayAmount;
+    const updatedNight = existingData.night + nightAmount;
     const updatedTotal = updatedDay + updatedNight;
-    const updatedReject = existingReject + rejectAmount;
-    const updatedMobile = mobile || existingMobile;
+    const updatedReject = existingData.reject + rejectAmount;
+    const updatedMobile = mobile || existingData.mobile;
+
+    const newWfhQty = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty))) ? Number(data.workFromHomeQty) : 0;
+    const existingWfhQty = existingData.workFromHomeQty || 0;
+    const updatedWfhQty = existingWfhQty + newWfhQty;
+
+    const newWfhGp = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
+    const existingWfhGp = existingData.workFromHomeGp || '';
+    let finalWfhGp = existingWfhGp;
+    if (newWfhGp) {
+      if (existingWfhGp && existingWfhGp !== newWfhGp) {
+        finalWfhGp = `${existingWfhGp}+${newWfhGp}`;
+      } else {
+        finalWfhGp = newWfhGp;
+      }
+    }
 
     const updatedRow = [
       existingSlNo,
@@ -213,7 +286,8 @@ export async function createSubmission(data: {
       updatedTotal,
       updatedReject,
       updatedMobile,
-      existingWorkFHome,
+      updatedWfhQty > 0 ? updatedWfhQty : '',
+      finalWfhGp,
       new Date().toISOString()
     ];
 
@@ -267,7 +341,8 @@ export async function createSubmission(data: {
       totalAmount,
       rejectAmount,
       mobile,
-      '',
+      wfhQtyVal,
+      wfhGpVal,
       new Date().toISOString()
     ];
 
@@ -328,7 +403,8 @@ export async function createSubmission(data: {
     totalAmount,
     rejectAmount,
     mobile,
-    '',
+    wfhQtyVal,
+    wfhGpVal,
     new Date().toISOString()
   ]);
 
@@ -365,7 +441,8 @@ export async function createSubmission(data: {
           totalAmount,
           rejectAmount,
           mobile,
-          '',
+          wfhQtyVal,
+          wfhGpVal,
           new Date().toISOString()
         ]
       ]);
@@ -424,6 +501,8 @@ export async function updateSubmission(
     name: string;
     mobile?: string;
     recordType: string;
+    workFromHomeGp?: string;
+    workFromHomeQty?: number;
     items: {
       gpName: string;
       shift: string;
@@ -438,7 +517,7 @@ export async function updateSubmission(
     const originalRowIndex = parseInt(rowIndexStr, 10);
     const originalSheetTitle = originalRecType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const rows = await getSheetValues(originalSheetTitle, 'A1:J');
+    const rows = await getSheetValues(originalSheetTitle, 'A1:L');
     let targetRowIdx = originalRowIndex;
     const targetRow = rows[targetRowIdx - 1];
     const matches = targetRow && 
@@ -503,11 +582,12 @@ export async function updateSubmission(
     const rejectAmount = data.items.reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
     const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
 
-    const currentRows = await getSheetValues(originalSheetTitle, `A${targetRowIdx}:K${targetRowIdx}`);
-    const slNo = currentRows[0]?.[0] || 1;
+    const currentRows = await getSheetValues(originalSheetTitle, `A${targetRowIdx}:L${targetRowIdx}`);
+    const currentRowData = extractRowData(currentRows[0] || []);
+    const slNo = currentRowData.slNo || 1;
 
     // 30 MINUTE WINDOW: Verify submission time
-    const rawTimestamp = currentRows[0]?.[10]?.trim();
+    const rawTimestamp = currentRowData.rawTimestamp;
     let submittedAt: number | null = null;
     if (rawTimestamp) {
       const parsed = Date.parse(rawTimestamp);
@@ -525,6 +605,11 @@ export async function updateSubmission(
     }
     const originalTimestamp = rawTimestamp || new Date().toISOString();
 
+    const wfhQtyVal = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty)) && Number(data.workFromHomeQty) > 0)
+      ? Number(data.workFromHomeQty)
+      : '';
+    const wfhGpVal = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
+
     const updatedRow = [
       slNo,
       formattedDate,
@@ -535,7 +620,8 @@ export async function updateSubmission(
       totalAmount,
       rejectAmount,
       mobile,
-      '',
+      wfhQtyVal,
+      wfhGpVal,
       originalTimestamp
     ];
 
@@ -559,7 +645,7 @@ export async function deleteSubmission(id: string) {
     let rowIndex = parseInt(rowIndexStr, 10);
     const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const rows = await getSheetValues(sheetTitle, 'A1:K');
+    const rows = await getSheetValues(sheetTitle, 'A1:L');
     let targetRowIdx = rowIndex;
     let targetRow = rows[targetRowIdx - 1];
     const matches = targetRow && 
@@ -580,7 +666,8 @@ export async function deleteSubmission(id: string) {
     }
 
     // 30 MINUTE WINDOW: Verify submission time
-    const rawTimestamp = targetRow[10]?.trim();
+    const rowData = extractRowData(targetRow);
+    const rawTimestamp = rowData.rawTimestamp;
     let submittedAt: number | null = null;
     if (rawTimestamp) {
       const parsed = Date.parse(rawTimestamp);
@@ -620,7 +707,7 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
   const queryMobile = query?.mobile ? query.mobile.trim().replace(/\D/g, '') : '';
 
   for (const sheetTitle of titlesToFetch) {
-    const rows = await getSheetValues(sheetTitle, 'A1:K');
+    const rows = await getSheetValues(sheetTitle, 'A1:L');
     const recType = sheetTitle === 'Entry' ? 'ENTRY' : 'VERIFY';
 
     rows.forEach((r, idx) => {
@@ -628,16 +715,8 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
       if (!r || r.length < 2) return;
       if (r[0] === 'SL NO.' || r[1] === 'DATE' || r[2] === 'DIO NAME' || r[2] === 'DEO NAME' || r[0]?.includes('M M S B Y')) return;
 
-      const slNo = parseInt(r[0], 10) || 0;
-      const date = r[1]?.trim() || '';
-      const name = r[2]?.trim() || '';
-      const gpName = r[3]?.trim() || '';
-      const day = Number(r[4]) || 0;
-      const night = Number(r[5]) || 0;
-      const total = Number(r[6]) || 0;
-      const reject = Number(r[7]) || 0;
-      const mobile = r[8]?.trim() || '';
-      const rawTimestamp = r[10]?.trim() || '';
+      const rowData = extractRowData(r);
+      const { slNo, date, name, gpName, day, night, total, reject, mobile, workFromHomeQty, workFromHomeGp, rawTimestamp } = rowData;
 
       if (!date || !name) return;
 
@@ -707,6 +786,8 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
         night,
         total,
         reject,
+        workFromHomeQty,
+        workFromHomeGp,
         recordType: recType,
         items,
         createdAt: now,
@@ -735,7 +816,7 @@ export async function getSubmission(id: string) {
     let rowIndex = parseInt(rowIndexStr, 10);
     const sheetTitle = recType === 'ENTRY' ? 'Entry' : 'Verified';
 
-    const rows = await getSheetValues(sheetTitle, 'A1:K');
+    const rows = await getSheetValues(sheetTitle, 'A1:L');
     let targetRowIdx = rowIndex;
     let r: string[] | null = rows[targetRowIdx - 1] || null;
     const matches = r && 
@@ -757,7 +838,8 @@ export async function getSubmission(id: string) {
 
     if (!r || r.length < 2) return null;
 
-    const rawTimestamp = r[10]?.trim();
+    const rowData = extractRowData(r);
+    const rawTimestamp = rowData.rawTimestamp;
     let submittedAt: number | null = null;
     if (rawTimestamp) {
       const parsed = Date.parse(rawTimestamp);
@@ -773,38 +855,30 @@ export async function getSubmission(id: string) {
       return {
         id,
         expired: true,
-        displayDate: toDDMMYYYY(r[1]) || r[1],
-        name: r[2],
+        displayDate: toDDMMYYYY(rowData.date) || rowData.date,
+        name: rowData.name,
       } as any;
     }
 
-    const slNo = parseInt(r[0], 10) || 0;
-    const rowDate = r[1]?.trim() || '';
-    const rowName = r[2]?.trim() || '';
-    const gpName = r[3]?.trim() || '';
-    const day = Number(r[4]) || 0;
-    const night = Number(r[5]) || 0;
-    const total = Number(r[6]) || 0;
-    const reject = Number(r[7]) || 0;
-    const mobile = r[8]?.trim() || '';
-
-    const items = parseSheetRowToItems(gpName, day, night, reject);
+    const items = parseSheetRowToItems(rowData.gpName, rowData.day, rowData.night, rowData.reject);
     const editUntilTime = submittedAt ? (submittedAt + THIRTY_MINUTES_MS) : (now + THIRTY_MINUTES_MS);
     const remainingMinutes = Math.max(1, Math.ceil((editUntilTime - now) / 60000));
 
     return {
       id,
       rowIndex: targetRowIdx,
-      slNo,
-      date: toYYYYMMDD(rowDate),
-      displayDate: rowDate,
-      name: rowName,
-      mobile,
-      gpName,
-      day,
-      night,
-      total,
-      reject,
+      slNo: rowData.slNo,
+      date: toYYYYMMDD(rowData.date),
+      displayDate: rowData.date,
+      name: rowData.name,
+      mobile: rowData.mobile,
+      gpName: rowData.gpName,
+      day: rowData.day,
+      night: rowData.night,
+      total: rowData.total,
+      reject: rowData.reject,
+      workFromHomeQty: rowData.workFromHomeQty,
+      workFromHomeGp: rowData.workFromHomeGp,
       recordType: recType as 'ENTRY' | 'VERIFY',
       items,
       createdAt: now,

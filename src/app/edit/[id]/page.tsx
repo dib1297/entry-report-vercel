@@ -49,6 +49,8 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
     name: submission.name,
     mobile: submission.mobile || '',
     recordType: submission.recordType as 'ENTRY' | 'VERIFY',
+    workFromHomeGp: (submission as any).workFromHomeGp || '',
+    workFromHomeQty: typeof (submission as any).workFromHomeQty === 'number' ? (submission as any).workFromHomeQty : undefined,
     items: submission.items && submission.items.length > 0
       ? submission.items.map((item: any) => ({
           gpName: canonicalGp(item.gpName),

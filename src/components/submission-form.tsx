@@ -4,16 +4,18 @@ import { useState, useTransition } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check, Lock } from 'lucide-react';
+import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check, Lock, Home } from 'lucide-react';
 import { createSubmission, updateSubmission } from '@/app/actions/submissions';
 import { useRouter } from 'next/navigation';
-import { cn, GP_LIST, canonicalGp } from '@/lib/utils';
+import { cn, GP_LIST, WFH_GP_LIST, canonicalGp } from '@/lib/utils';
 
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
   name: z.string().min(1, 'DEO Name is required').trim(),
   mobile: z.string().optional().refine(val => !val || /^[0-9]{10}$/.test(val), { message: 'Must be a valid 10-digit mobile number' }),
   recordType: z.enum(['ENTRY', 'VERIFY']),
+  workFromHomeGp: z.string().optional(),
+  workFromHomeQty: z.number().min(0, 'Quantity must be 0 or more').optional(),
   items: z.array(z.object({
     gpName: z.string().min(1, 'GP is required'),
     shift: z.enum(['DAY', 'NIGHT']),
@@ -60,6 +62,8 @@ export default function SubmissionForm({
       ...initialData,
       name: isEditing ? initialData.name : (currentUser?.name || initialData.name),
       mobile: isEditing ? (initialData.mobile || currentUser?.mobile || '') : (currentUser?.mobile || initialData.mobile),
+      workFromHomeGp: initialData.workFromHomeGp || '',
+      workFromHomeQty: typeof initialData.workFromHomeQty === 'number' && !isNaN(initialData.workFromHomeQty) ? initialData.workFromHomeQty : undefined,
       items: initialData.items && initialData.items.length > 0 
         ? initialData.items.map(it => ({ ...it, gpName: canonicalGp(it.gpName) })) 
         : [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
@@ -68,6 +72,8 @@ export default function SubmissionForm({
       name: effectiveInitialName,
       mobile: effectiveInitialMobile,
       recordType: 'ENTRY',
+      workFromHomeGp: '',
+      workFromHomeQty: undefined,
       items: [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
     },
   });
@@ -210,6 +216,26 @@ export default function SubmissionForm({
             </div>
           ))}
         </div>
+
+        {/* Work From Home Details in Preview */}
+        {(previewData.workFromHomeGp || (previewData.workFromHomeQty !== undefined && previewData.workFromHomeQty > 0)) && (
+          <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/60 space-y-2 text-sm">
+            <div className="flex items-center justify-between border-b border-blue-200/80 pb-2">
+              <span className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Home size={14} className="text-blue-600" /> Work From Home Details
+              </span>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-200/60 text-blue-900">WFH</span>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+              <span className="text-gray-600 font-medium">Work F Home GP:</span>
+              <span className="font-bold text-gray-900">{previewData.workFromHomeGp || '—'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600 font-medium">Work F Home Qty:</span>
+              <span className="font-bold text-blue-700 text-base">{Number(previewData.workFromHomeQty || 0).toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+        )}
 
         {/* Totals Summary */}
         <div className="bg-gray-100 p-4 rounded-xl border border-gray-200 text-sm space-y-2">
@@ -486,6 +512,70 @@ export default function SubmissionForm({
         >
           <Plus size={16} /> Add Another GP
         </button>
+      </div>
+
+      <hr className="border-gray-200" />
+
+      {/* Work From Home Section */}
+      <div className="p-4 sm:p-5 rounded-xl border border-blue-200 bg-blue-50/40 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <Home size={15} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gray-900">Work From Home</h3>
+              <p className="text-[11px] text-gray-500">Optional: Select GP (or NO ARRIVAL) and enter quantity</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded">
+            WFH
+          </span>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+              Work F Home GP
+            </label>
+            <select
+              {...register('workFromHomeGp')}
+              className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+            >
+              <option value="">-- Select WFH GP / Status --</option>
+              {WFH_GP_LIST.map((gp) => (
+                <option key={gp} value={gp}>
+                  {gp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+              Work F Home Qty
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="0"
+              onFocus={(e) => {
+                if (e.target.value === '0') e.target.select();
+              }}
+              {...register('workFromHomeQty', {
+                setValueAs: (v) => (v === '' || v === null || isNaN(Number(v)) ? undefined : Number(v))
+              })}
+              className={cn(
+                "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors",
+                errors.workFromHomeQty ? "border-rose-400" : "border-gray-300"
+              )}
+            />
+            {errors.workFromHomeQty && (
+              <p className="text-rose-600 text-xs font-medium">{errors.workFromHomeQty.message}</p>
+            )}
+          </div>
+        </div>
       </div>
 
       <hr className="border-gray-200" />
