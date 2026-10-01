@@ -5,6 +5,7 @@ export interface UserRecord {
   mobile: string;
   password: string;
   name: string;
+  access?: string;
 }
 
 export interface SessionUser {
@@ -57,79 +58,55 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
       sheetTitle = metaRes.data.sheets[0].properties.title;
     }
   } catch (err: any) {
-    if (err?.code === 403 || err?.status === 403 || err?.response?.status === 403) {
-      throw new Error(
-        'GOOGLE_SHEET_PERMISSION_DENIED: গুগল শিটে পারমিশন নেই! আপনার গুগল শিটটি (1zdJuU27q4oNgsVHm8O0JD-pZJ6Q-8iHRL23JD9IbZ2Q) sheets-api@primeval-voyage-495317-n2.iam.gserviceaccount.com কে Viewer পারমিশন দিন।'
-      );
-    }
+    console.error('Error fetching sheet metadata:', err);
     throw err;
   }
 
   // 2. Fetch rows from the sheet
   const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A1:Z500`)}`;
-  let valuesRes: any;
-  try {
-    valuesRes = await auth.request({ url: valuesUrl });
-  } catch (err: any) {
-    if (err?.code === 403 || err?.status === 403 || err?.response?.status === 403) {
-      throw new Error(
-        'GOOGLE_SHEET_PERMISSION_DENIED: গুগল শিটে পারমিশন নেই! আপনার গুগল শিটটি (1zdJuU27q4oNgsVHm8O0JD-pZJ6Q-8iHRL23JD9IbZ2Q) sheets-api@primeval-voyage-495317-n2.iam.gserviceaccount.com কে Viewer পারমিশন দিন।'
-      );
-    }
-    throw err;
-  }
-
+  const valuesRes: any = await auth.request({ url: valuesUrl });
   const rows: string[][] = valuesRes.data?.values || [];
   if (rows.length === 0) return [];
 
-  // 3. Detect column indices
-  const headerRow = rows[0].map(h => String(h || '').trim().toLowerCase());
-  
+  // 3. Detect header row by scanning first 5 rows
+  let headerRowIndex = -1;
   let mobileIdx = -1;
   let passIdx = -1;
   let nameIdx = -1;
+  let accessIdx = -1;
 
-  headerRow.forEach((col, idx) => {
-    if (col.includes('mobile') || col.includes('phone') || col.includes('contact') || col.includes('number') || col.includes('মোবাইল')) {
-      if (mobileIdx === -1) mobileIdx = idx;
-    } else if (col.includes('pass') || col.includes('pwd') || col.includes('pin') || col.includes('পাসওয়ার্ড')) {
-      if (passIdx === -1) passIdx = idx;
-    } else if (col.includes('name') || col.includes('deo') || col.includes('user') || col.includes('নাম')) {
-      if (nameIdx === -1) nameIdx = idx;
-    }
-  });
-
-  let dataRows = rows;
-  const isHeaderPresent = mobileIdx !== -1 || passIdx !== -1;
-  if (isHeaderPresent) {
-    dataRows = rows.slice(1);
-  } else {
-    // If no explicit header found, fallback:
-    // Check if column 0 looks like mobile (digits)
-    const firstCellDigits = cleanMobile(rows[0][0]);
-    if (firstCellDigits.length === 10) {
-      mobileIdx = 0;
-      passIdx = 1;
-      nameIdx = 2;
-    } else {
-      // Maybe Column 0 is Name, Column 1 is Mobile, Column 2 is Password
-      const secondCellDigits = cleanMobile(rows[0][1]);
-      if (secondCellDigits.length === 10) {
-        nameIdx = 0;
-        mobileIdx = 1;
-        passIdx = 2;
-      } else {
-        // Default assumption
-        mobileIdx = 0;
-        passIdx = 1;
-        nameIdx = 2;
-      }
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const row = rows[r].map(c => String(c || '').trim().toLowerCase());
+    const mIdx = row.findIndex(c => 
+      c.includes('mobile') || c.includes('phone') || c.includes('contact') || c.includes('number') || c.includes('মোবাইল')
+    );
+    const pIdx = row.findIndex(c => 
+      c.includes('pass') || c.includes('pwd') || c.includes('pin') || c.includes('পাসওয়ার্ড')
+    );
+    if (mIdx !== -1 && pIdx !== -1) {
+      headerRowIndex = r;
+      mobileIdx = mIdx;
+      passIdx = pIdx;
+      nameIdx = row.findIndex(c => 
+        c.includes('name') || c.includes('deo') || c.includes('user') || c.includes('নাম')
+      );
+      accessIdx = row.findIndex(c => 
+        c.includes('access') || c.includes('status') || c.includes('অনুমতি')
+      );
+      break;
     }
   }
 
-  // Ensure default fallbacks if one is missing
-  if (mobileIdx === -1) mobileIdx = 0;
-  if (passIdx === -1) passIdx = mobileIdx === 0 ? 1 : 0;
+  let dataRows: string[][];
+  if (headerRowIndex !== -1) {
+    dataRows = rows.slice(headerRowIndex + 1);
+  } else {
+    // Fallback if headers are not found in row 0-4
+    mobileIdx = 0;
+    passIdx = 1;
+    nameIdx = 2;
+    dataRows = rows;
+  }
 
   const users: UserRecord[] = [];
 
@@ -138,6 +115,7 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
     const rawMobile = row[mobileIdx] || '';
     const rawPass = row[passIdx] || '';
     const rawName = nameIdx !== -1 && row[nameIdx] ? String(row[nameIdx]).trim() : '';
+    const rawAccess = accessIdx !== -1 && row[accessIdx] ? String(row[accessIdx]).trim().toUpperCase() : 'YES';
 
     const mobile = cleanMobile(rawMobile);
     const password = String(rawPass).trim();
@@ -147,6 +125,7 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
         mobile,
         password,
         name: rawName || `DEO (${mobile.slice(-4)})`,
+        access: rawAccess,
       });
     }
   }
@@ -158,11 +137,8 @@ export async function verifyCredentials(mobileInput: string, passwordInput: stri
   const cleanInput = cleanMobile(mobileInput);
   const trimmedPass = String(passwordInput || '').trim();
 
-  if (!cleanInput) {
-    return { success: false, error: 'সঠিক মোবাইল নম্বর লিখুন।' };
-  }
-  if (!trimmedPass) {
-    return { success: false, error: 'পাসওয়ার্ড লিখুন।' };
+  if (!cleanInput || !trimmedPass) {
+    return { success: false, error: 'Incorrect mobile no. and pass word' };
   }
 
   let users: UserRecord[] = [];
@@ -194,6 +170,14 @@ export async function verifyCredentials(mobileInput: string, passwordInput: stri
     };
   }
 
+  // Check if access is explicitly restricted (e.g. access === 'NO')
+  if (matchedUser.access && matchedUser.access === 'NO') {
+    return {
+      success: false,
+      error: 'Incorrect mobile no. and pass word',
+    };
+  }
+
   return {
     success: true,
     user: {
@@ -208,7 +192,7 @@ export async function createSession(user: SessionUser) {
   const cookieStore = await cookies();
   const sessionData = JSON.stringify(user);
   cookieStore.set('auth_session', sessionData, {
-    httpOnly: false, // Accessible to read on client if needed
+    httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
