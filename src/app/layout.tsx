@@ -1,9 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import FabMenu from "@/components/fab-menu";
 
 const inter = Inter({ subsets: ["latin"] });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 export const metadata: Metadata = {
   title: "Entry Verified Report",
@@ -18,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} bg-gray-50 text-gray-900 min-h-screen flex flex-col antialiased`} suppressHydrationWarning>
-        <main className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 w-full max-w-5xl mx-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
           {children}
         </main>
         

@@ -44,16 +44,16 @@ export default async function OldRecordsPage(props: {
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">Enter your DEO name or mobile number to search and edit submissions.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <Link
             href="/new"
-            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-xs transition-colors"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-xs transition-colors"
           >
             <PlusCircle size={14} /> New Entry
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft size={14} /> Home
           </Link>
@@ -61,8 +61,8 @@ export default async function OldRecordsPage(props: {
       </div>
 
       {/* Filter Section */}
-      <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs">
-        <form className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3.5 items-end">
+      <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-200 shadow-xs">
+        <form className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-3.5 items-end">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO Name</label>
             <input 
@@ -123,7 +123,7 @@ export default async function OldRecordsPage(props: {
       {/* Results Section */}
       <div className="space-y-3">
         {!hasFilter ? (
-          <div className="bg-white p-10 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
+          <div className="bg-white p-6 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
             <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-3">
               <Search size={22} />
             </div>
@@ -135,7 +135,7 @@ export default async function OldRecordsPage(props: {
             </p>
           </div>
         ) : submissions.length === 0 ? (
-          <div className="bg-white p-10 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
+          <div className="bg-white p-6 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
             <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-500 mx-auto flex items-center justify-center mb-3">
               <Search size={22} />
             </div>
@@ -160,29 +160,29 @@ export default async function OldRecordsPage(props: {
 
             return (
               <details key={sub.id} open className="group bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
-                <summary className="p-4 sm:p-5 cursor-pointer list-none flex flex-col sm:flex-row gap-4 sm:items-center justify-between hover:bg-gray-50/70 transition-colors">
-                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
+                <summary className="p-3.5 sm:p-5 cursor-pointer list-none flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center justify-between hover:bg-gray-50/70 transition-colors">
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 items-start sm:items-center">
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</p>
-                      <p className="font-bold text-gray-900 text-sm mt-0.5">{sub.displayDate}</p>
+                      <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</p>
+                      <p className="font-bold text-gray-900 text-xs sm:text-sm mt-0.5">{sub.displayDate}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">DEO Name</p>
-                      <p className="font-bold text-gray-900 text-sm mt-0.5">{sub.name}</p>
-                      {sub.mobile && <p className="text-xs text-gray-500 font-medium">{sub.mobile}</p>}
+                      <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">DEO Name</p>
+                      <p className="font-bold text-gray-900 text-xs sm:text-sm mt-0.5 truncate">{sub.name}</p>
+                      {sub.mobile && <p className="text-[11px] text-gray-500 font-medium">{sub.mobile}</p>}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</p>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold mt-0.5 ${sub.recordType === 'ENTRY' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                      <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] sm:text-xs font-bold mt-0.5 ${sub.recordType === 'ENTRY' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                         {sub.recordType === 'ENTRY' ? 'ENTRY' : 'VERIFIED'}
                       </span>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total / Reject</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="font-bold text-gray-900 text-base">{total.toLocaleString('en-IN')}</span>
+                      <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">Total / Reject</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="font-bold text-gray-900 text-sm sm:text-base">{total.toLocaleString('en-IN')}</span>
                         {reject > 0 && (
-                          <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
+                          <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">
                             Rej: {reject}
                           </span>
                         )}
@@ -190,10 +190,10 @@ export default async function OldRecordsPage(props: {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 self-end sm:self-center">
+                  <div className="flex items-center gap-2 justify-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
                     <Link 
                       href={`/edit/${sub.id}`} 
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1 shadow-xs"
                     >
                       <Edit2 size={13} /> Edit
                     </Link>

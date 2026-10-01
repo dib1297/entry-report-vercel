@@ -125,12 +125,12 @@ export default function SubmissionForm({
     const totalProblem = previewData.items.reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
 
     return (
-      <div className="bg-white p-6 sm:p-8 rounded-xl border border-gray-200 shadow-xs max-w-2xl mx-auto space-y-6">
+      <div className="bg-white p-4 sm:p-8 rounded-xl border border-gray-200 shadow-xs max-w-2xl mx-auto space-y-5 sm:space-y-6">
         
         {/* Header */}
-        <div className="border-b border-gray-200 pb-4 flex items-center justify-between">
+        <div className="border-b border-gray-200 pb-3.5 sm:pb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Confirm Submission</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Confirm Submission</h2>
             <p className="text-xs text-gray-500 mt-0.5">Please check all information before submitting.</p>
           </div>
           <span className="text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200">
@@ -257,7 +257,7 @@ export default function SubmissionForm({
 
   // ================= FORM ENTRY STEP =================
   return (
-    <form onSubmit={handleSubmit(handleProceedToPreview)} className="bg-white p-6 sm:p-8 rounded-xl border border-gray-200 shadow-xs max-w-4xl mx-auto space-y-6">
+    <form onSubmit={handleSubmit(handleProceedToPreview)} className="bg-white p-4 sm:p-8 rounded-xl border border-gray-200 shadow-xs max-w-4xl mx-auto space-y-5 sm:space-y-6">
       
       {errorMsg && (
         <div className="bg-rose-50 text-rose-700 p-4 rounded-lg text-sm font-medium border border-rose-200">

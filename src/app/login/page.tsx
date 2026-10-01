@@ -66,11 +66,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[75vh] flex flex-col justify-center items-center px-4 py-8">
-      <div className="w-full max-w-sm bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8 space-y-5 overflow-hidden">
+    <div className="min-h-[80vh] flex flex-col justify-center items-center px-3 sm:px-4 py-4 sm:py-8">
+      <div className="w-full max-w-sm bg-white rounded-xl border border-gray-200 shadow-sm p-5 sm:p-8 space-y-4 sm:space-y-5 overflow-hidden">
         {/* Simple Header */}
         <div className="text-center space-y-1">
-          <h1 className="text-xl font-bold text-gray-900">DEO Login</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">DEO Login</h1>
           <p className="text-xs text-gray-500">Mukhyamantri Swasthya Bima Yojana</p>
         </div>
 

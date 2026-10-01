@@ -39,14 +39,14 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(10, Math.random() * height);
-    ctx.lineTo(width - 10, Math.random() * height);
+    ctx.moveTo(8, Math.random() * (height - 10) + 5);
+    ctx.lineTo(width - 8, Math.random() * (height - 10) + 5);
     ctx.stroke();
 
     // Draw characters cleanly
     const charSpacing = width / (code.length + 1);
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+    ctx.font = 'bold 18px monospace';
     ctx.fillStyle = '#1e293b';
 
     for (let i = 0; i < code.length; i++) {
@@ -54,7 +54,7 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
       ctx.save();
       const x = charSpacing * (i + 1);
       const y = height / 2;
-      const angle = (Math.random() * 14 - 7) * (Math.PI / 180);
+      const angle = (Math.random() * 12 - 6) * (Math.PI / 180);
 
       ctx.translate(x, y);
       ctx.rotate(angle);
@@ -79,14 +79,14 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <div 
-        className="rounded-lg overflow-hidden border border-gray-300 bg-gray-50 cursor-pointer select-none shrink-0"
+        className="rounded-xl overflow-hidden border border-gray-300 bg-gray-50 cursor-pointer select-none shrink-0 h-[40px] flex items-center"
         onClick={refreshCaptcha}
         title="Click to refresh captcha"
       >
         <canvas
           ref={canvasRef}
-          width={100}
-          height={38}
+          width={92}
+          height={40}
           className="block"
         />
       </div>
@@ -96,9 +96,9 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
         onClick={refreshCaptcha}
         title="Refresh captcha"
         aria-label="Refresh Captcha"
-        className="w-[38px] h-[38px] rounded-lg border border-gray-300 text-gray-500 hover:text-[#ff6200] hover:border-[#ff6200] hover:bg-orange-50 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+        className="w-[40px] h-[40px] rounded-xl border border-gray-300 text-gray-500 hover:text-[#ff6200] hover:border-[#ff6200] hover:bg-orange-50 active:bg-orange-100 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
       >
-        <RotateCw size={15} className={isRotating ? 'animate-spin' : ''} />
+        <RotateCw size={16} className={isRotating ? 'animate-spin' : ''} />
       </button>
     </div>
   );
