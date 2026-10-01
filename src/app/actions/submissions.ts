@@ -171,7 +171,7 @@ export async function createSubmission(data: {
       const currentLive = liveUsers.find(u => u.mobile === mobile);
       if (currentLive) {
         if (currentLive.access === 'NO') {
-          return { success: false, error: 'Your account access has been revoked in Google Sheet.' };
+          return { success: false, error: 'Your account access has been revoked.' };
         }
         if (currentLive.name) {
           deoName = normalizeName(currentLive.name);
@@ -532,7 +532,7 @@ export async function updateSubmission(
       if (foundIdx !== -1) {
         targetRowIdx = foundIdx + 1;
       } else {
-        return { success: false, error: 'Original record could not be found in Google Sheet to update.' };
+        return { success: false, error: 'Original record could not be found to update.' };
       }
     }
 
@@ -561,7 +561,7 @@ export async function updateSubmission(
         const currentLive = liveUsers.find(u => u.mobile === mobile);
         if (currentLive) {
           if (currentLive.access === 'NO') {
-            return { success: false, error: 'Your account access has been revoked in Google Sheet.' };
+            return { success: false, error: 'Your account access has been revoked.' };
           }
           if (currentLive.name) {
             deoName = normalizeName(currentLive.name);

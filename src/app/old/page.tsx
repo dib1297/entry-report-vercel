@@ -36,7 +36,7 @@ export default async function OldRecordsPage(props: {
       {isUpdated && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-sm font-semibold flex items-center gap-2.5 shadow-xs animate-in fade-in">
           <CheckCircle size={18} className="text-emerald-600 shrink-0" />
-          <span>Record updated successfully in Google Sheet!</span>
+          <span>DEO Record updated successfully!</span>
         </div>
       )}
 

@@ -34,7 +34,7 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2.5">
             <CheckCircle className="text-emerald-600 shrink-0" size={17} />
-            <span>Report successfully submitted & saved to Google Sheet!</span>
+            <span>DEO Report successfully submitted!</span>
           </div>
           <Link href="/" className="text-emerald-500 hover:text-emerald-800 p-1 rounded-md transition-colors" title="Close">
             <X size={16} />
