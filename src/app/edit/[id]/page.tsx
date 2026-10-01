@@ -33,7 +33,7 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
           <div className="pt-2">
             <Link
               href="/old"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#ff6200] hover:bg-[#ea580c] text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
             >
               <ArrowLeft size={14} /> Back to Edit Section
             </Link>
@@ -69,7 +69,7 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
           <p className="text-xs text-gray-500 mt-0.5">Modify record details within 30 minutes.</p>
         </div>
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex items-center text-xs font-semibold text-blue-700 bg-blue-50 px-3 py-1 rounded-md border border-blue-200 w-fit">
+          <span className="inline-flex items-center text-xs font-semibold text-orange-700 bg-orange-50 px-3 py-1 rounded-md border border-orange-200 w-fit">
             {submission.recordType === 'ENTRY' ? 'Entry Record' : 'Verified Record'} • {submission.displayDate}
           </span>
           {typeof (submission as any).remainingMinutes === 'number' && (

@@ -69,7 +69,7 @@ export default function FabMenu() {
           width: 60px;
           height: 60px;
           border-radius: 50%;
-          background-color: #2563eb;
+          background-color: #ff6200;
           color: #ffffff;
           display: flex;
           align-items: center;
@@ -85,7 +85,7 @@ export default function FabMenu() {
 
         .fab-main:hover {
           transform: scale(1.1) translateY(-2px);
-          background-color: #1d4ed8;
+          background-color: #ea580c;
           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
         

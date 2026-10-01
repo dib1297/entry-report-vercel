@@ -16,7 +16,7 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
       {sessionUser && (
         <div className="bg-white border border-gray-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-xs flex items-center justify-between gap-2 animate-in fade-in">
           <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700 min-w-0 flex-1">
-            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold text-xs shrink-0">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-orange-100 text-[#ea580c] font-bold text-xs shrink-0">
               <UserCheck size={16} />
             </span>
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0 truncate">
@@ -52,13 +52,13 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
         {/* NEW CARD */}
         <Link 
           href="/new" 
-          className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-gray-200 shadow-xs hover:border-blue-600 hover:shadow-md transition-all flex flex-col items-center justify-center text-center gap-3 sm:gap-4 group cursor-pointer active:scale-[0.99]"
+          className="bg-white p-6 sm:p-8 rounded-2xl border-2 border-gray-200 shadow-xs hover:border-[#ff6200] hover:shadow-md transition-all flex flex-col items-center justify-center text-center gap-3 sm:gap-4 group cursor-pointer active:scale-[0.99]"
         >
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-orange-50 text-[#ff6200] flex items-center justify-center group-hover:bg-[#ff6200] group-hover:text-white transition-colors">
             <PlusCircle className="w-9 h-9 sm:w-11 sm:h-11" />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">DEO'S ENTRY</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 group-hover:text-[#ff6200] transition-colors">DEO'S ENTRY</h2>
             <p className="text-xs text-gray-500 mt-1 font-medium">M M S B Y</p>
           </div>
         </Link>

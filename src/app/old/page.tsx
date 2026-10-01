@@ -54,7 +54,7 @@ export default async function OldRecordsPage(props: {
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Link
             href="/new"
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-xs transition-colors"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-[#ff6200] hover:bg-[#ea580c] text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-xs transition-colors"
           >
             <PlusCircle size={14} /> New Entry
           </Link>
@@ -80,7 +80,7 @@ export default async function OldRecordsPage(props: {
               autoComplete="off"
               defaultValue={name}
               placeholder="Enter DEO name..."
-              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-[#ff6200] transition-colors"
             />
           </div>
           <div className="space-y-1.5">
@@ -94,7 +94,7 @@ export default async function OldRecordsPage(props: {
               autoComplete="off"
               defaultValue={mobile}
               placeholder="Enter 10-digit mobile..."
-              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-[#ff6200] transition-colors"
             />
           </div>
           <div className="space-y-1.5">
@@ -103,7 +103,7 @@ export default async function OldRecordsPage(props: {
               name="date" 
               type="date" 
               defaultValue={date}
-              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-[#ff6200] transition-colors"
             />
           </div>
           <div className="space-y-1.5">
@@ -111,7 +111,7 @@ export default async function OldRecordsPage(props: {
             <select 
               name="recordType" 
               defaultValue={recordType || 'All'}
-              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-[#ff6200] transition-colors"
             >
               <option value="All">All (Entry & Verified)</option>
               <option value="ENTRY">Entry Only</option>
@@ -119,7 +119,7 @@ export default async function OldRecordsPage(props: {
             </select>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3.5 rounded-lg text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+            <button type="submit" className="flex-1 bg-[#ff6200] hover:bg-[#ea580c] text-white font-semibold py-2 px-3.5 rounded-lg text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
               <Search size={16} /> Search
             </button>
             {hasFilter && (
@@ -135,7 +135,7 @@ export default async function OldRecordsPage(props: {
       <div className="space-y-3">
         {!hasFilter ? (
           <div className="bg-white p-6 sm:p-14 rounded-xl border border-gray-200 text-center shadow-xs">
-            <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-3">
+            <div className="w-12 h-12 rounded-full bg-orange-50 text-[#ff6200] mx-auto flex items-center justify-center mb-3">
               <Search size={22} />
             </div>
             <h3 className="text-base font-semibold text-gray-800">
@@ -184,7 +184,7 @@ export default async function OldRecordsPage(props: {
                     </div>
                     <div>
                       <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</p>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] sm:text-xs font-bold mt-0.5 ${sub.recordType === 'ENTRY' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] sm:text-xs font-bold mt-0.5 ${sub.recordType === 'ENTRY' ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                         {sub.recordType === 'ENTRY' ? 'ENTRY' : 'VERIFIED'}
                       </span>
                     </div>
@@ -198,7 +198,7 @@ export default async function OldRecordsPage(props: {
                           </span>
                         )}
                         {(sub.workFromHomeQty !== undefined && sub.workFromHomeQty > 0) && (
-                          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.5 rounded">
+                          <span className="text-[11px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1 py-0.5 rounded">
                             WFH: {sub.workFromHomeQty}
                           </span>
                         )}
@@ -214,7 +214,7 @@ export default async function OldRecordsPage(props: {
                     )}
                     <Link 
                       href={`/edit/${sub.id}`} 
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1 shadow-xs"
+                      className="bg-[#ff6200] hover:bg-[#ea580c] text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1 shadow-xs"
                     >
                       <Edit2 size={13} /> Edit
                     </Link>
@@ -240,15 +240,15 @@ export default async function OldRecordsPage(props: {
                   </div>
 
                   {(sub.workFromHomeGp || (sub.workFromHomeQty !== undefined && sub.workFromHomeQty > 0)) && (
-                    <div className="mb-3 p-3 rounded-lg bg-blue-50/70 border border-blue-200 text-xs flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-blue-900 font-semibold">
-                        <Home size={14} className="text-blue-600" />
+                    <div className="mb-3 p-3 rounded-lg bg-orange-50/70 border border-orange-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-orange-950 font-semibold">
+                        <Home size={14} className="text-[#ff6200]" />
                         <span>Work From Home GP:</span>
                         <span className="font-bold text-gray-900">{sub.workFromHomeGp || 'NO ARRIVAL'}</span>
                       </div>
-                      <div className="text-blue-800">
+                      <div className="text-orange-800">
                         <span>Quantity: </span>
-                        <strong className="text-blue-950 font-bold text-sm">{(sub.workFromHomeQty || 0).toLocaleString('en-IN')}</strong>
+                        <strong className="text-orange-950 font-bold text-sm">{(sub.workFromHomeQty || 0).toLocaleString('en-IN')}</strong>
                       </div>
                     </div>
                   )}
