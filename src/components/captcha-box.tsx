@@ -46,7 +46,7 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
     // Draw characters cleanly
     const charSpacing = width / (code.length + 1);
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
     ctx.fillStyle = '#1e293b';
 
     for (let i = 0; i < code.length; i++) {
@@ -54,11 +54,11 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
       ctx.save();
       const x = charSpacing * (i + 1);
       const y = height / 2;
-      const angle = (Math.random() * 16 - 8) * (Math.PI / 180);
+      const angle = (Math.random() * 14 - 7) * (Math.PI / 180);
 
       ctx.translate(x, y);
       ctx.rotate(angle);
-      ctx.fillText(char, -6, 0);
+      ctx.fillText(char, -5, 0);
       ctx.restore();
     }
   }, []);
@@ -77,15 +77,15 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
   }, []);
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 shrink-0">
       <div 
-        className="rounded-lg overflow-hidden border border-gray-300 bg-gray-50 cursor-pointer select-none"
+        className="rounded-lg overflow-hidden border border-gray-300 bg-gray-50 cursor-pointer select-none shrink-0"
         onClick={refreshCaptcha}
         title="Click to refresh captcha"
       >
         <canvas
           ref={canvasRef}
-          width={120}
+          width={100}
           height={38}
           className="block"
         />
@@ -96,7 +96,7 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
         onClick={refreshCaptcha}
         title="Refresh captcha"
         aria-label="Refresh Captcha"
-        className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+        className="w-[38px] h-[38px] rounded-lg border border-gray-300 text-gray-500 hover:text-[#ff6200] hover:border-[#ff6200] hover:bg-orange-50 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
       >
         <RotateCw size={15} className={isRotating ? 'animate-spin' : ''} />
       </button>

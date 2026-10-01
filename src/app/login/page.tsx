@@ -67,7 +67,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[75vh] flex flex-col justify-center items-center px-4 py-8">
-      <div className="w-full max-w-sm bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8 space-y-5">
+      <div className="w-full max-w-sm bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8 space-y-5 overflow-hidden">
         {/* Simple Header */}
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold text-gray-900">DEO Login</h1>
@@ -136,7 +136,7 @@ export default function LoginPage() {
             <label className="text-xs font-medium text-gray-700 block mb-1">
               Captcha
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full">
               <CaptchaBox onCodeChange={(code) => setCaptchaExpected(code)} />
               <input
                 type="text"
@@ -146,7 +146,7 @@ export default function LoginPage() {
                 maxLength={5}
                 disabled={isLoading}
                 autoComplete="off"
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-gray-900 text-sm font-semibold tracking-wider uppercase focus:outline-none focus:ring-1 focus:ring-[#ff6200] focus:border-[#ff6200] transition-colors"
+                className="min-w-0 flex-1 w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-900 text-sm font-semibold tracking-wider uppercase focus:outline-none focus:ring-1 focus:ring-[#ff6200] focus:border-[#ff6200] transition-colors"
               />
             </div>
           </div>
