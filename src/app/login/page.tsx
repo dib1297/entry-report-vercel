@@ -103,7 +103,7 @@ export default function LoginPage() {
               placeholder="Enter 10-digit mobile number"
               disabled={isLoading}
               autoComplete="tel"
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 transition-colors"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-[#ff6200] focus:border-[#ff6200] transition-colors"
             />
           </div>
 
@@ -119,7 +119,7 @@ export default function LoginPage() {
                 placeholder="Enter password"
                 disabled={isLoading}
                 autoComplete="current-password"
-                className="w-full px-3 py-2 pr-9 rounded-lg border border-gray-300 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 transition-colors"
+                className="w-full px-3 py-2 pr-9 rounded-lg border border-gray-300 text-gray-900 text-sm focus:outline-none focus:ring-1 focus:ring-[#ff6200] focus:border-[#ff6200] transition-colors"
               />
               <button
                 type="button"
@@ -146,7 +146,7 @@ export default function LoginPage() {
                 maxLength={5}
                 disabled={isLoading}
                 autoComplete="off"
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-gray-900 text-sm font-semibold tracking-wider uppercase focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 transition-colors"
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-gray-900 text-sm font-semibold tracking-wider uppercase focus:outline-none focus:ring-1 focus:ring-[#ff6200] focus:border-[#ff6200] transition-colors"
               />
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-400 text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+              className="w-full bg-[#ff6200] hover:bg-[#ea580c] active:bg-[#c2410c] disabled:bg-[#fdba74] text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:cursor-not-allowed shadow-2xs"
             >
               {isLoading ? 'Verifying...' : 'Login'}
             </button>
