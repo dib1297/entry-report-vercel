@@ -1,14 +1,33 @@
 import Link from "next/link";
-import { PlusCircle, Edit, CheckCircle, X } from "lucide-react";
+import { PlusCircle, Edit, CheckCircle, X, UserCheck } from "lucide-react";
+import { getSession } from "@/lib/auth";
+import LogoutButton from "@/components/logout-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home(props: { searchParams?: Promise<{ success?: string }> | { success?: string } }) {
   const resolvedParams = props.searchParams ? await props.searchParams : {};
   const isSuccess = resolvedParams?.success === '1';
+  const sessionUser = await getSession();
 
   return (
-    <div className="max-w-2xl mx-auto py-8 sm:py-16 space-y-6">
+    <div className="max-w-2xl mx-auto py-6 sm:py-12 space-y-6">
+      {/* Top User Bar */}
+      {sessionUser && (
+        <div className="bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-xs flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
+              <UserCheck size={16} />
+            </span>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+              <span className="font-bold text-gray-900">{sessionUser.name || 'DEO User'}</span>
+              <span className="text-xs text-gray-500 font-mono">({sessionUser.mobile})</span>
+            </div>
+          </div>
+          <LogoutButton />
+        </div>
+      )}
+
       {isSuccess && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2.5">
@@ -21,7 +40,7 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
         </div>
       )}
 
-      <div className="text-center space-y-2 mb-8">
+      <div className="text-center space-y-2 mb-8 pt-2">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Mukhyamantri Swasthya Bima Yojana Report</h1>
       </div>
 
@@ -57,5 +76,3 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
     </div>
   );
 }
-
-
