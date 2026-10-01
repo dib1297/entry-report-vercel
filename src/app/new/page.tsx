@@ -2,11 +2,15 @@ import SubmissionForm from "@/components/submission-form";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getKnownDeoNames } from "@/app/actions/submissions";
+import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewRecordPage() {
-  const knownDeoNames = await getKnownDeoNames();
+  const [knownDeoNames, sessionUser] = await Promise.all([
+    getKnownDeoNames(),
+    getSession(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -22,7 +26,7 @@ export default async function NewRecordPage() {
           <ArrowLeft size={14} /> Back
         </Link>
       </div>
-      <SubmissionForm knownDeoNames={knownDeoNames} />
+      <SubmissionForm knownDeoNames={knownDeoNames} currentUser={sessionUser} />
     </div>
   );
 }

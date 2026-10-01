@@ -1,21 +1,28 @@
 import { getSubmissions } from "@/app/actions/submissions";
 import Link from "next/link";
-import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle, ShieldCheck } from "lucide-react";
+import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle, ShieldCheck, Lock } from "lucide-react";
 import DeleteButton from "@/components/delete-button";
+import { getSession } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function OldRecordsPage(props: {
   searchParams?: Promise<{ name?: string; date?: string; mobile?: string; recordType?: string; updated?: string }> | { name?: string; date?: string; mobile?: string; recordType?: string; updated?: string };
 }) {
-  const resolvedParams = props?.searchParams ? await props.searchParams : {};
-  const name = typeof resolvedParams?.name === 'string' ? resolvedParams.name.trim() : '';
-  const mobile = typeof resolvedParams?.mobile === 'string' ? resolvedParams.mobile.trim() : '';
+  const [resolvedParams, sessionUser] = await Promise.all([
+    props?.searchParams ? await props.searchParams : {},
+    getSession(),
+  ]);
+
+  // If user is logged in, their name and mobile are FIXED to their login session!
+  const name = sessionUser?.name || (typeof resolvedParams?.name === 'string' ? resolvedParams.name.trim() : '');
+  const mobile = sessionUser?.mobile || (typeof resolvedParams?.mobile === 'string' ? resolvedParams.mobile.trim() : '');
   const date = typeof resolvedParams?.date === 'string' ? resolvedParams.date.trim() : '';
   const recordType = typeof resolvedParams?.recordType === 'string' ? resolvedParams.recordType : '';
   const isUpdated = Boolean(resolvedParams?.updated);
 
-  // Security rule: Reports will NEVER be displayed without specific search criteria (DEO Name, Mobile, or Date).
+  // Filter is active if user is logged in or parameters are provided
   const hasFilter = Boolean(name || mobile || date);
 
   const submissions = hasFilter 
@@ -64,26 +71,52 @@ export default async function OldRecordsPage(props: {
       <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-200 shadow-xs">
         <form className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-3.5 items-end">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO Name</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO Name</label>
+              {sessionUser && (
+                <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <Lock size={10} /> Fixed
+                </span>
+              )}
+            </div>
             <input 
               name="name" 
               type="text" 
+              readOnly={!!sessionUser}
               autoComplete="off"
               defaultValue={name}
               placeholder="Enter DEO name..."
-              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+              className={cn(
+                "w-full px-3.5 py-2 rounded-lg border text-sm transition-colors",
+                sessionUser 
+                  ? "bg-gray-100 text-gray-700 font-semibold cursor-not-allowed border-gray-300 select-none shadow-inner" 
+                  : "bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600"
+              )}
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile No.</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile No.</label>
+              {sessionUser && (
+                <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <Lock size={10} /> Fixed
+                </span>
+              )}
+            </div>
             <input 
               name="mobile" 
               type="tel" 
+              readOnly={!!sessionUser}
               maxLength={10}
               autoComplete="off"
               defaultValue={mobile}
               placeholder="Enter 10-digit mobile..."
-              className="w-full px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors"
+              className={cn(
+                "w-full px-3.5 py-2 rounded-lg border text-sm transition-colors",
+                sessionUser 
+                  ? "bg-gray-100 text-gray-700 font-semibold cursor-not-allowed border-gray-300 select-none shadow-inner" 
+                  : "bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600"
+              )}
             />
           </div>
           <div className="space-y-1.5">

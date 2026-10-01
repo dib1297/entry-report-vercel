@@ -3,12 +3,14 @@ import SubmissionForm from "@/components/submission-form";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { getSession } from "@/lib/auth";
 
 export default async function EditRecordPage(props: { params: Promise<{ id: string }> | { id: string } }) {
   const resolvedParams = await props.params;
-  const [submission, knownDeoNames] = await Promise.all([
+  const [submission, knownDeoNames, sessionUser] = await Promise.all([
     getSubmission(resolvedParams.id),
-    getKnownDeoNames()
+    getKnownDeoNames(),
+    getSession(),
   ]);
 
   if (!submission) {
@@ -54,6 +56,7 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
         isEditing={true} 
         editId={submission.id} 
         knownDeoNames={knownDeoNames} 
+        currentUser={sessionUser}
       />
     </div>
   );

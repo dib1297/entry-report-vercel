@@ -2,6 +2,7 @@
 
 import { normalizeName } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
+import { getSession } from '@/lib/auth';
 import { 
   getSheetValues, 
   appendSheetRows, 
@@ -98,8 +99,9 @@ export async function createSubmission(data: {
 }) {
   const sheetTitle = data.recordType === 'ENTRY' ? 'Entry' : 'Verified';
   const formattedDate = toDDMMYYYY(data.date);
-  const deoName = normalizeName(data.name);
-  const mobile = data.mobile ? data.mobile.trim() : '';
+  const session = await getSession();
+  const deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
+  const mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
 
   // 1. Calculate Day & Night totals
   const dayAmount = data.items
@@ -444,8 +446,9 @@ export async function updateSubmission(
 
     // In-place update within same date section and same sheet
     const formattedDate = newFormattedDate;
-    const deoName = normalizeName(data.name);
-    const mobile = data.mobile ? data.mobile.trim() : '';
+    const session = await getSession();
+    const deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
+    const mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
 
     const dayAmount = data.items
       .filter(item => item.shift === 'DAY')

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check } from 'lucide-react';
+import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check, Lock } from 'lucide-react';
 import { createSubmission, updateSubmission } from '@/app/actions/submissions';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -43,12 +43,14 @@ export default function SubmissionForm({
   initialData, 
   isEditing = false, 
   editId,
-  knownDeoNames = []
+  knownDeoNames = [],
+  currentUser = null
 }: { 
   initialData?: FormValues, 
   isEditing?: boolean, 
   editId?: string,
-  knownDeoNames?: string[]
+  knownDeoNames?: string[],
+  currentUser?: { mobile: string; name: string } | null
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -58,6 +60,9 @@ export default function SubmissionForm({
   
   const defaultDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+  const effectiveInitialName = currentUser?.name || initialData?.name || '';
+  const effectiveInitialMobile = currentUser?.mobile || initialData?.mobile || '';
+
   const {
     register,
     control,
@@ -66,10 +71,14 @@ export default function SubmissionForm({
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+      ...initialData,
+      name: currentUser?.name || initialData.name,
+      mobile: currentUser?.mobile || initialData.mobile,
+    } : {
       date: defaultDate,
-      name: '',
-      mobile: '',
+      name: effectiveInitialName,
+      mobile: effectiveInitialMobile,
       recordType: 'ENTRY',
       items: [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
     },
@@ -281,19 +290,30 @@ export default function SubmissionForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO NAME</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">DEO NAME</label>
+            {currentUser && (
+              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                <Lock size={10} /> Fixed
+              </span>
+            )}
+          </div>
           <input 
             type="text" 
-            list="known-deos-list"
+            readOnly={!!currentUser}
+            list={currentUser ? undefined : "known-deos-list"}
             autoComplete="off"
-            placeholder="Enter or select DEO name"
+            placeholder="DEO name"
             {...register('name')}
             className={cn(
-              "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
+              "w-full px-3.5 py-2.5 rounded-lg border text-sm transition-colors", 
+              currentUser 
+                ? "bg-gray-100 text-gray-700 font-semibold cursor-not-allowed border-gray-300 select-none shadow-inner" 
+                : "bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600",
               errors.name ? "border-rose-400" : "border-gray-300"
             )}
           />
-          {knownDeoNames.length > 0 && (
+          {!currentUser && knownDeoNames.length > 0 && (
             <datalist id="known-deos-list">
               {knownDeoNames.map(deo => (
                 <option key={deo} value={deo} />
@@ -304,18 +324,31 @@ export default function SubmissionForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile Number</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-600">Mobile Number</label>
+            {currentUser && (
+              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                <Lock size={10} /> Fixed
+              </span>
+            )}
+          </div>
           <input 
             type="tel" 
+            readOnly={!!currentUser}
             maxLength={10}
-            placeholder="Enter 10-digit mobile"
+            placeholder="10-digit mobile"
             {...register('mobile', {
               onChange: (e) => {
-                e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                if (!currentUser) {
+                  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                }
               }
             })}
             className={cn(
-              "w-full px-3.5 py-2.5 rounded-lg border bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600 transition-colors", 
+              "w-full px-3.5 py-2.5 rounded-lg border text-sm transition-colors", 
+              currentUser 
+                ? "bg-gray-100 text-gray-700 font-semibold cursor-not-allowed border-gray-300 select-none shadow-inner" 
+                : "bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-600",
               errors.mobile ? "border-rose-400" : "border-gray-300"
             )}
           />
