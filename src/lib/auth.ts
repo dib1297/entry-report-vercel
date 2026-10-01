@@ -170,22 +170,16 @@ export async function verifyCredentials(mobileInput: string, passwordInput: stri
     users = await fetchUsersFromGoogleSheet();
   } catch (err: any) {
     console.error('Error fetching users from sheet:', err);
-    if (err.message?.includes('GOOGLE_SHEET_PERMISSION_DENIED')) {
-      return {
-        success: false,
-        error: 'গুগল শিট পারমিশন নেই! অনুগ্রহ করে শিটে sheets-api@primeval-voyage-495317-n2.iam.gserviceaccount.com কে Viewer পারমিশন দিন।',
-      };
-    }
     return {
       success: false,
-      error: 'গুগল শিট থেকে ডেটা পড়তে সমস্যা হচ্ছে: ' + (err.message || 'অজানা ত্রুটি'),
+      error: 'Incorrect mobile no. and pass word',
     };
   }
 
   if (users.length === 0) {
     return {
       success: false,
-      error: 'গুগল শিটে কোনো ব্যবহারকারীর তথ্য পাওয়া যায়নি। অনুগ্রহ করে শিটে মোবাইল নম্বর ও পাসওয়ার্ড যুক্ত করুন।',
+      error: 'Incorrect mobile no. and pass word',
     };
   }
 
@@ -196,7 +190,7 @@ export async function verifyCredentials(mobileInput: string, passwordInput: stri
   if (!matchedUser) {
     return {
       success: false,
-      error: 'মোবাইল নম্বর অথবা পাসওয়ার্ড সঠিক নয়!',
+      error: 'Incorrect mobile no. and pass word',
     };
   }
 

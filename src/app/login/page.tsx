@@ -57,7 +57,7 @@ export default function LoginPage() {
       });
 
       if (!res.success) {
-        setErrorMessage(res.error || 'মোবাইল নম্বর অথবা পাসওয়ার্ড সঠিক নয়!');
+        setErrorMessage(res.error || 'Incorrect mobile no. and pass word');
         setIsLoading(false);
         return;
       }
@@ -69,7 +69,7 @@ export default function LoginPage() {
       }, 700);
     } catch (err: any) {
       console.error(err);
-      setErrorMessage('সার্ভারে যোগাযোগ করতে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।');
+      setErrorMessage('Incorrect mobile no. and pass word');
       setIsLoading(false);
     }
   };

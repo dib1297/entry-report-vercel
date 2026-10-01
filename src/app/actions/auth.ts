@@ -28,7 +28,7 @@ export async function loginAction(params: {
   const result = await verifyCredentials(mobile, password);
 
   if (!result.success || !result.user) {
-    return { success: false, error: result.error || 'মোবাইল নম্বর অথবা পাসওয়ার্ড ভুল!' };
+    return { success: false, error: result.error || 'Incorrect mobile no. and pass word' };
   }
 
   // 3. Create Session
