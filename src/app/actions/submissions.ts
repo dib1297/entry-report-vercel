@@ -138,10 +138,7 @@ function parseDateToTime(dateStr: string): number {
 }
 
 function normalizeGpName(gp: string): string {
-  return gp
-    .trim()
-    .replace(/[–—−]/g, '-')
-    .replace(/\s+/g, ' ');
+  return canonicalGp(gp);
 }
 
 export async function createSubmission(data: {
@@ -178,6 +175,16 @@ export async function createSubmission(data: {
         }
       }
     } catch (_) {}
+  }
+
+  // GP authorization check
+  if (session?.allowedGps && session.allowedGps.length > 0) {
+    for (const item of data.items) {
+      const canonical = canonicalGp(item.gpName);
+      if (!session.allowedGps.includes(canonical)) {
+        return { success: false, error: `Unauthorized GP "${item.gpName}". You only have access to: ${session.allowedGps.join(', ')}` };
+      }
+    }
   }
 
   // 1. Calculate Day & Night totals
@@ -508,6 +515,16 @@ export async function updateSubmission(
   }
 ) {
   try {
+    const session = await getSession();
+    if (session?.allowedGps && session.allowedGps.length > 0) {
+      for (const item of data.items) {
+        const canonical = canonicalGp(item.gpName);
+        if (!session.allowedGps.includes(canonical)) {
+          return { success: false, error: `Unauthorized GP "${item.gpName}". You only have access to: ${session.allowedGps.join(', ')}` };
+        }
+      }
+    }
+
     const decoded = Buffer.from(id, 'base64url').toString('utf8');
     const [originalRecType, rowIndexStr, originalDate, originalName] = decoded.split('|');
     const originalRowIndex = parseInt(rowIndexStr, 10);
@@ -546,7 +563,6 @@ export async function updateSubmission(
 
     // In-place update within same date section and same sheet
     const formattedDate = newFormattedDate;
-    const session = await getSession();
     let deoName = data.name ? normalizeName(data.name) : (session?.name ? normalizeName(session.name) : '');
     let mobile = data.mobile ? data.mobile.trim() : (session?.mobile ? session.mobile.trim() : '');
 

@@ -1,17 +1,23 @@
 import { JWT } from 'google-auth-library';
 import { cookies } from 'next/headers';
+import { parseAllowedGps } from '@/lib/utils';
 
 export interface UserRecord {
   mobile: string;
   password: string;
   name: string;
   access?: string;
+  gp?: string;
+  qty?: string;
 }
 
 export interface SessionUser {
   mobile: string;
   name: string;
   loginAt: number;
+  gp?: string;
+  qty?: string;
+  allowedGps?: string[];
 }
 
 export function getAuthSheetsClient() {
@@ -45,6 +51,8 @@ export function cleanMobile(num: any): string {
   }
   return digits;
 }
+
+let liveUserCache: { timestamp: number; data: UserRecord[] } | null = null;
 
 export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
   const { auth, spreadsheetId } = getAuthSheetsClient();
@@ -86,6 +94,8 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
   let passIdx = -1;
   let nameIdx = -1;
   let accessIdx = -1;
+  let gpIdx = -1;
+  let qtyIdx = -1;
 
   for (let r = 0; r < Math.min(rows.length, 5); r++) {
     const row = rows[r].map(c => String(c || '').trim().toLowerCase());
@@ -102,8 +112,14 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
       nameIdx = row.findIndex(c => 
         c.includes('name') || c.includes('deo') || c.includes('user') || c.includes('নাম')
       );
-      accessIdx = row.findIndex(c => 
-        c.includes('access') || c.includes('status') || c.includes('অনুমতি')
+      gpIdx = row.findIndex(c => 
+        c.includes('gp access') || c === 'gp' || c.includes('gram panchayat') || c.includes('জি পি') || (c.includes('gp') && !c.includes('status'))
+      );
+      accessIdx = row.findIndex((c, idx) => 
+        idx !== gpIdx && (c === 'access' || c.includes('status') || c.includes('অনুমতি') || (c.includes('access') && !c.includes('gp')))
+      );
+      qtyIdx = row.findIndex(c => 
+        c === 'qty' || c.includes('qty') || c.includes('quantity')
       );
       break;
     }
@@ -114,9 +130,12 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
     dataRows = rows.slice(headerRowIndex + 1);
   } else {
     // Fallback if headers are not found in row 0-4
-    mobileIdx = 0;
-    passIdx = 1;
-    nameIdx = 2;
+    mobileIdx = 2;
+    passIdx = 3;
+    nameIdx = 1;
+    gpIdx = 4;
+    qtyIdx = 5;
+    accessIdx = 6;
     dataRows = rows;
   }
 
@@ -128,6 +147,8 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
     const rawPass = row[passIdx] || '';
     const rawName = nameIdx !== -1 && row[nameIdx] ? String(row[nameIdx]).trim() : '';
     const rawAccess = accessIdx !== -1 && row[accessIdx] ? String(row[accessIdx]).trim().toUpperCase() : 'YES';
+    const rawGp = gpIdx !== -1 && row[gpIdx] ? String(row[gpIdx]).trim() : '';
+    const rawQty = qtyIdx !== -1 && row[qtyIdx] ? String(row[qtyIdx]).trim() : '';
 
     const mobile = cleanMobile(rawMobile);
     const password = String(rawPass).trim();
@@ -138,11 +159,23 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
         password,
         name: rawName || `DEO (${mobile.slice(-4)})`,
         access: rawAccess,
+        gp: rawGp,
+        qty: rawQty,
       });
     }
   }
 
   return users;
+}
+
+export async function getLiveUsersCached(): Promise<UserRecord[]> {
+  const now = Date.now();
+  if (liveUserCache && (now - liveUserCache.timestamp) < 5000) {
+    return liveUserCache.data;
+  }
+  const data = await fetchUsersFromGoogleSheet();
+  liveUserCache = { timestamp: now, data };
+  return data;
 }
 
 export async function verifyCredentials(mobileInput: string, passwordInput: string): Promise<{ success: boolean; user?: SessionUser; error?: string }> {
@@ -190,12 +223,17 @@ export async function verifyCredentials(mobileInput: string, passwordInput: stri
     };
   }
 
+  const allowedGps = parseAllowedGps(matchedUser.gp);
+
   return {
     success: true,
     user: {
       mobile: matchedUser.mobile,
       name: matchedUser.name,
       loginAt: Date.now(),
+      gp: matchedUser.gp || '',
+      qty: matchedUser.qty || '',
+      allowedGps,
     },
   };
 }
@@ -217,7 +255,33 @@ export async function getSession(): Promise<SessionUser | null> {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('auth_session');
     if (!sessionCookie?.value) return null;
-    return JSON.parse(sessionCookie.value) as SessionUser;
+    const session = JSON.parse(sessionCookie.value) as SessionUser;
+
+    // Enrich with live GP assignment from Google Sheet
+    if (session?.mobile || session?.name) {
+      try {
+        const users = await getLiveUsersCached();
+        const cleanUserMob = cleanMobile(session.mobile);
+        const live = users.find(u => 
+          (cleanUserMob && cleanMobile(u.mobile) === cleanUserMob) ||
+          (session.name && u.name && u.name.trim().toLowerCase() === session.name.trim().toLowerCase())
+        );
+        if (live) {
+          if (live.name) session.name = live.name;
+          session.gp = live.gp || '';
+          session.qty = live.qty || '';
+          session.allowedGps = parseAllowedGps(live.gp);
+        } else {
+          session.allowedGps = parseAllowedGps(session.gp);
+        }
+      } catch (_) {
+        session.allowedGps = parseAllowedGps(session.gp);
+      }
+    } else {
+      session.allowedGps = parseAllowedGps(session?.gp);
+    }
+
+    return session;
   } catch {
     return null;
   }

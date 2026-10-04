@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlusCircle, Edit, CheckCircle, X, UserCheck } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import LogoutButton from "@/components/logout-button";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,10 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
   const resolvedParams = props.searchParams ? await props.searchParams : {};
   const isSuccess = resolvedParams?.success === '1';
   const sessionUser = await getSession();
+
+  if (!sessionUser) {
+    redirect('/login');
+  }
 
   return (
     <div className="max-w-2xl mx-auto py-3 sm:py-10 space-y-4 sm:space-y-6">
@@ -22,6 +27,11 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0 truncate">
               <span className="font-bold text-gray-900 truncate">{sessionUser.name || 'DEO User'}</span>
               <span className="text-[11px] sm:text-xs text-gray-500 font-mono">({sessionUser.mobile})</span>
+              {sessionUser.gp && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-orange-100 text-orange-800 border border-orange-200 w-fit">
+                  GP: {sessionUser.gp}
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0">

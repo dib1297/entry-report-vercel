@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check, Lock, Home } from 'lucide-react';
 import { createSubmission, updateSubmission } from '@/app/actions/submissions';
 import { useRouter } from 'next/navigation';
-import { cn, GP_LIST, WFH_GP_LIST, canonicalGp } from '@/lib/utils';
+import { cn, GP_LIST, WFH_GP_LIST, canonicalGp, parseAllowedGps } from '@/lib/utils';
 
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -37,7 +37,13 @@ export default function SubmissionForm({
   isEditing?: boolean, 
   editId?: string,
   knownDeoNames?: string[],
-  currentUser?: { mobile: string; name: string } | null
+  currentUser?: { 
+    mobile: string; 
+    name: string; 
+    gp?: string; 
+    qty?: string; 
+    allowedGps?: string[];
+  } | null
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -49,6 +55,13 @@ export default function SubmissionForm({
 
   const effectiveInitialName = currentUser?.name || initialData?.name || '';
   const effectiveInitialMobile = currentUser?.mobile || initialData?.mobile || '';
+
+  const userAssignedGps = currentUser?.allowedGps && currentUser.allowedGps.length > 0
+    ? currentUser.allowedGps
+    : (currentUser?.gp ? parseAllowedGps(currentUser.gp) : []);
+
+  const hasSpecificGps = userAssignedGps.length > 0;
+  const defaultGp = hasSpecificGps ? userAssignedGps[0] : '';
 
   const {
     register,
@@ -66,7 +79,7 @@ export default function SubmissionForm({
       workFromHomeQty: typeof initialData.workFromHomeQty === 'number' && !isNaN(initialData.workFromHomeQty) ? initialData.workFromHomeQty : undefined,
       items: initialData.items && initialData.items.length > 0 
         ? initialData.items.map(it => ({ ...it, gpName: canonicalGp(it.gpName) })) 
-        : [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
+        : [{ gpName: defaultGp, shift: 'DAY', amount: 0, problemAmount: 0 }],
     } : {
       date: defaultDate,
       name: effectiveInitialName,
@@ -74,7 +87,7 @@ export default function SubmissionForm({
       recordType: 'ENTRY',
       workFromHomeGp: '',
       workFromHomeQty: undefined,
-      items: [{ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 }],
+      items: [{ gpName: defaultGp, shift: 'DAY', amount: 0, problemAmount: 0 }],
     },
   });
 
@@ -418,7 +431,14 @@ export default function SubmissionForm({
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700">GP Name</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-700">GP Name</label>
+                  {hasSpecificGps && (
+                    <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded">
+                      Assigned GP
+                    </span>
+                  )}
+                </div>
                 <select 
                   {...register(`items.${index}.gpName`)}
                   className={cn(
@@ -426,18 +446,21 @@ export default function SubmissionForm({
                     errors.items?.[index]?.gpName ? "border-rose-400" : "border-gray-300"
                   )}
                 >
-                  <option value="">-- Select Gram Panchayat --</option>
+                  {!hasSpecificGps && <option value="">-- Select Gram Panchayat --</option>}
+                  {hasSpecificGps && userAssignedGps.length > 1 && <option value="">-- Select Assigned GP --</option>}
                   {(() => {
                     const currentGp = watchItems?.[index]?.gpName;
-                    const allGps = [...GP_LIST];
-                    if (currentGp && !allGps.includes(currentGp)) {
-                      allGps.push(currentGp);
+                    const currentShift = watchItems?.[index]?.shift;
+                    // If user has specific assigned GPs, ONLY show those! Otherwise show all GP_LIST
+                    const baseGps = hasSpecificGps ? [...userAssignedGps] : [...GP_LIST];
+                    if (currentGp && !baseGps.includes(currentGp)) {
+                      baseGps.push(currentGp);
                     }
-                    return allGps.map(gp => {
-                      const isSelectedElsewhere = watchItems?.some((it, i) => i !== index && it?.gpName === gp);
+                    return baseGps.map(gp => {
+                      const isSelectedElsewhere = watchItems?.some((it, i) => i !== index && it?.gpName === gp && it?.shift === currentShift);
                       return (
                         <option key={gp} value={gp} disabled={isSelectedElsewhere}>
-                          {gp} {isSelectedElsewhere ? '(Already selected)' : ''}
+                          {gp} {isSelectedElsewhere ? '(Same shift already added)' : ''}
                         </option>
                       );
                     });
@@ -507,7 +530,7 @@ export default function SubmissionForm({
 
         <button
           type="button"
-          onClick={() => append({ gpName: '', shift: 'DAY', amount: 0, problemAmount: 0 })}
+          onClick={() => append({ gpName: defaultGp, shift: 'DAY', amount: 0, problemAmount: 0 })}
           className="inline-flex items-center gap-1.5 text-[#ff6200] font-semibold text-sm hover:text-[#ea580c] transition-colors py-2 px-3 rounded-lg border border-dashed border-orange-300 hover:bg-orange-50"
         >
           <Plus size={16} /> Add Another GP
@@ -543,7 +566,7 @@ export default function SubmissionForm({
               className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-[#ff6200] transition-colors"
             >
               <option value="">-- Select WFH GP / Status --</option>
-              {WFH_GP_LIST.map((gp) => (
+              {(hasSpecificGps ? [...userAssignedGps, 'NO ARRIVAL'] : WFH_GP_LIST).map((gp) => (
                 <option key={gp} value={gp}>
                   {gp}
                 </option>

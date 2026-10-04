@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getKnownDeoNames } from "@/app/actions/submissions";
 import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ export default async function NewRecordPage() {
     getKnownDeoNames(),
     getSession(),
   ]);
+
+  if (!sessionUser) {
+    redirect('/login');
+  }
 
   return (
     <div className="space-y-6">

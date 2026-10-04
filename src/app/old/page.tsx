@@ -4,6 +4,7 @@ import { Search, ChevronDown, Edit2, ArrowLeft, PlusCircle, CheckCircle, ShieldC
 import DeleteButton from "@/components/delete-button";
 import { getSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,10 @@ export default async function OldRecordsPage(props: {
     props?.searchParams ? await props.searchParams : {},
     getSession(),
   ]);
+
+  if (!sessionUser) {
+    redirect('/login');
+  }
 
   // Default name and mobile to session user, but allow search overrides
   const name = typeof resolvedParams?.name === 'string' ? resolvedParams.name.trim() : (sessionUser?.name || '');

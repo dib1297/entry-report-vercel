@@ -1,6 +1,6 @@
 import { getSubmission, getKnownDeoNames } from "@/app/actions/submissions";
 import SubmissionForm from "@/components/submission-form";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
@@ -13,6 +13,10 @@ export default async function EditRecordPage(props: { params: Promise<{ id: stri
     getKnownDeoNames(),
     getSession(),
   ]);
+
+  if (!sessionUser) {
+    redirect('/login');
+  }
 
   if (!submission) {
     notFound();
