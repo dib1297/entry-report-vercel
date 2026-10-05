@@ -1,6 +1,6 @@
 import { JWT } from 'google-auth-library';
 import { cookies } from 'next/headers';
-import { parseAllowedGps } from '@/lib/utils';
+import { parseAllowedGps, isAllGpAccess } from '@/lib/utils';
 
 export interface UserRecord {
   mobile: string;
@@ -146,9 +146,14 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
     const rawMobile = row[mobileIdx] || '';
     const rawPass = row[passIdx] || '';
     const rawName = nameIdx !== -1 && row[nameIdx] ? String(row[nameIdx]).trim() : '';
-    const rawAccess = accessIdx !== -1 && row[accessIdx] ? String(row[accessIdx]).trim().toUpperCase() : 'YES';
-    const rawGp = gpIdx !== -1 && row[gpIdx] ? String(row[gpIdx]).trim() : '';
+    let rawAccess = accessIdx !== -1 && row[accessIdx] ? String(row[accessIdx]).trim().toUpperCase() : 'YES';
+    let rawGp = gpIdx !== -1 && row[gpIdx] ? String(row[gpIdx]).trim() : '';
     const rawQty = qtyIdx !== -1 && row[qtyIdx] ? String(row[qtyIdx]).trim() : '';
+
+    if (isAllGpAccess(rawAccess)) {
+      rawGp = rawGp || 'ALL GP';
+      rawAccess = 'YES';
+    }
 
     const mobile = cleanMobile(rawMobile);
     const password = String(rawPass).trim();

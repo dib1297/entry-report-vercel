@@ -1,6 +1,6 @@
 'use server';
 
-import { normalizeName, canonicalGp } from '@/lib/utils';
+import { normalizeName, canonicalGp, isAllGpAccess, GP_LIST } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
 import { getSession, fetchUsersFromGoogleSheet } from '@/lib/auth';
 import { 
@@ -178,7 +178,8 @@ export async function createSubmission(data: {
   }
 
   // GP authorization check
-  if (session?.allowedGps && session.allowedGps.length > 0) {
+  const isAllGp = isAllGpAccess(session?.gp) || (session?.allowedGps && session.allowedGps.length >= GP_LIST.length);
+  if (!isAllGp && session?.allowedGps && session.allowedGps.length > 0) {
     for (const item of data.items) {
       const canonical = canonicalGp(item.gpName);
       if (!session.allowedGps.includes(canonical)) {
@@ -206,6 +207,43 @@ export async function createSubmission(data: {
     : '';
   const wfhGpVal = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
 
+  // 1. Group items by distinct GP (preserving order of entry)
+  const distinctGps: string[] = [];
+  data.items.forEach(item => {
+    const cGp = canonicalGp(item.gpName?.trim() || '');
+    if (cGp && !distinctGps.includes(cGp)) {
+      distinctGps.push(cGp);
+    }
+  });
+
+  if (distinctGps.length === 0 && data.items.length > 0) {
+    distinctGps.push(canonicalGp(data.items[0].gpName?.trim() || '') || data.items[0].gpName?.trim() || '');
+  }
+
+  const gpRowsData = distinctGps.map((gp, idx) => {
+    const gpItems = data.items.filter(item => canonicalGp(item.gpName?.trim() || '') === gp);
+    const dayAmount = gpItems
+      .filter(item => item.shift === 'DAY')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const nightAmount = gpItems
+      .filter(item => item.shift === 'NIGHT')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalAmount = dayAmount + nightAmount;
+    const rejectAmount = gpItems
+      .reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
+
+    return {
+      gpName: gp,
+      dayAmount,
+      nightAmount,
+      totalAmount,
+      rejectAmount,
+      // Only attach WFH details to the first row of this submission
+      wfhQty: idx === 0 ? wfhQtyVal : '',
+      wfhGp: idx === 0 ? wfhGpVal : '',
+    };
+  });
+
   // 2. Fetch existing rows from the target sheet
   const rows = await getSheetValues(sheetTitle, 'A1:L');
 
@@ -219,104 +257,12 @@ export async function createSubmission(data: {
     }
   }
 
-  // Ensure all existing rows with multiple GPs have their font size adjusted
+  // Ensure all existing rows have proper font size
   try {
     await adjustAllGpFontSizes(sheetTitle, rows);
   } catch (_) {}
 
-  // 3. Check if DEO already has a row on the SAME DATE in this sheet
-  // Rule: A DEO name cannot appear twice on the same date; GP names merge with '+' and amounts add up
-  let existingRowIndex = -1;
-  let existingRow: string[] | null = null;
-
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
-      const rowDate = toDDMMYYYY(r[1] || '');
-      const rowDeoName = (r[2] || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const searchDeoName = deoName.toLowerCase().replace(/\s+/g, ' ');
-
-      if (rowDate === formattedDate && rowDeoName === searchDeoName) {
-        existingRowIndex = i + 1; // Google Sheets row number (1-indexed)
-        existingRow = r;
-        break;
-      }
-    }
-  }
-
-  // 4. If existing row on same date is found, update in-place without adding duplicate row
-  if (existingRow && existingRowIndex > 0) {
-    const existingData = extractRowData(existingRow);
-    const existingSlNo = existingData.slNo || '1';
-    const existingGpRaw = existingData.gpName || '';
-    const existingGps = existingGpRaw.split('+').map(g => g.trim()).filter(Boolean);
-    const newGps = data.items.map(item => item.gpName?.trim()).filter(Boolean);
-
-    // Merge GP names: combine distinct GPs preserving order (normalizing dashes and spacing)
-    const mergedGps: string[] = [...existingGps];
-    for (const gp of newGps) {
-      const normNew = normalizeGpName(gp).toLowerCase();
-      if (!mergedGps.some(existing => normalizeGpName(existing).toLowerCase() === normNew)) {
-        mergedGps.push(gp);
-      }
-    }
-    const finalGpNames = mergedGps.join('+');
-
-    const updatedDay = existingData.day + dayAmount;
-    const updatedNight = existingData.night + nightAmount;
-    const updatedTotal = updatedDay + updatedNight;
-    const updatedReject = existingData.reject + rejectAmount;
-    const updatedMobile = mobile || existingData.mobile;
-
-    const newWfhQty = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty))) ? Number(data.workFromHomeQty) : 0;
-    const existingWfhQty = existingData.workFromHomeQty || 0;
-    const updatedWfhQty = existingWfhQty + newWfhQty;
-
-    const newWfhGp = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
-    const existingWfhGp = existingData.workFromHomeGp || '';
-    let finalWfhGp = existingWfhGp;
-    if (newWfhGp) {
-      if (existingWfhGp && existingWfhGp !== newWfhGp) {
-        finalWfhGp = `${existingWfhGp}+${newWfhGp}`;
-      } else {
-        finalWfhGp = newWfhGp;
-      }
-    }
-
-    const updatedRow = [
-      existingSlNo,
-      formattedDate,
-      deoName,
-      finalGpNames,
-      updatedDay,
-      updatedNight,
-      updatedTotal,
-      updatedReject,
-      updatedMobile,
-      updatedWfhQty > 0 ? updatedWfhQty : '',
-      finalWfhGp
-    ];
-
-    await updateSheetRow(sheetTitle, existingRowIndex, updatedRow);
-    try {
-      await adjustGpCellFontSize(sheetTitle, existingRowIndex, finalGpNames);
-      await formatDataRow(sheetTitle, existingRowIndex);
-    } catch (_) {}
-
-    safeRevalidate();
-    return { success: true };
-  }
-
-  // 5. New entry on this date: check if this date already has an existing section in the sheet
-  const uniqueGps: string[] = [];
-  data.items.map(item => item.gpName.trim()).filter(Boolean).forEach(gp => {
-    const norm = normalizeGpName(gp).toLowerCase();
-    if (!uniqueGps.some(existing => normalizeGpName(existing).toLowerCase() === norm)) {
-      uniqueGps.push(gp);
-    }
-  });
-  const newGpNames = uniqueGps.join('+');
-
+  // 3. Check if this date already has an existing section in the sheet
   let lastRowIndexForThisDate = -1; // 1-based index in sheet
   let maxSlNoForThisDate = 0;
 
@@ -336,37 +282,46 @@ export async function createSubmission(data: {
 
   // Case A: This date already has a section in the sheet
   if (lastRowIndexForThisDate > 0) {
-    const nextSlNo = maxSlNoForThisDate + 1;
-    const newRow = [
-      nextSlNo,
-      formattedDate,
-      deoName,
-      newGpNames,
-      dayAmount,
-      nightAmount,
-      totalAmount,
-      rejectAmount,
-      mobile,
-      wfhQtyVal,
-      wfhGpVal
-    ];
+    const rowsToAdd = gpRowsData.map((gpData, idx) => {
+      const nextSlNo = maxSlNoForThisDate + 1 + idx;
+      return [
+        nextSlNo,
+        formattedDate,
+        deoName,
+        gpData.gpName,
+        gpData.dayAmount,
+        gpData.nightAmount,
+        gpData.totalAmount,
+        gpData.rejectAmount,
+        mobile,
+        gpData.wfhQty,
+        gpData.wfhGp
+      ];
+    });
 
     if (lastRowIndexForThisDate < rows.length) {
-      // Subsequent date sections (e.g. 30th date section) already exist below this date!
+      // Subsequent date sections exist below this date!
       // Insert right after the last row of this date (at lastRowIndexForThisDate + 1)
-      await insertSheetRow(sheetTitle, lastRowIndexForThisDate + 1, newRow);
-      try {
-        await adjustGpCellFontSize(sheetTitle, lastRowIndexForThisDate + 1, newGpNames);
-        await formatDataRow(sheetTitle, lastRowIndexForThisDate + 1);
-      } catch (_) {}
+      const insertAtRow = lastRowIndexForThisDate + 1;
+      await insertSheetRows(sheetTitle, insertAtRow, rowsToAdd);
+      for (let k = 0; k < rowsToAdd.length; k++) {
+        const targetRow = insertAtRow + k;
+        try {
+          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
+          await formatDataRow(sheetTitle, targetRow);
+        } catch (_) {}
+      }
     } else {
       // This date section is currently the last section in the sheet
-      const appendRes = await appendSheetRows(sheetTitle, [newRow]);
+      const appendRes = await appendSheetRows(sheetTitle, rowsToAdd);
       try {
         const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
-        const newRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
-        await adjustGpCellFontSize(sheetTitle, newRowIdx, newGpNames);
-        await formatDataRow(sheetTitle, newRowIdx);
+        const startRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
+        for (let k = 0; k < rowsToAdd.length; k++) {
+          const targetRow = startRowIdx + k;
+          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
+          await formatDataRow(sheetTitle, targetRow);
+        }
       } catch (_) {}
     }
 
@@ -396,64 +351,62 @@ export async function createSubmission(data: {
     }
   }
 
-  const rowsToInsert: any[][] = [];
-  rowsToInsert.push(HEADER_ROW);
-  rowsToInsert.push([
-    1,
-    formattedDate,
-    deoName,
-    newGpNames,
-    dayAmount,
-    nightAmount,
-    totalAmount,
-    rejectAmount,
-    mobile,
-    wfhQtyVal,
-    wfhGpVal
-  ]);
+  const rowsToAdd = gpRowsData.map((gpData, idx) => {
+    const slNo = 1 + idx;
+    return [
+      slNo,
+      formattedDate,
+      deoName,
+      gpData.gpName,
+      gpData.dayAmount,
+      gpData.nightAmount,
+      gpData.totalAmount,
+      gpData.rejectAmount,
+      mobile,
+      gpData.wfhQty,
+      gpData.wfhGp
+    ];
+  });
 
   if (firstLaterRowIndex > 0) {
     // Older date submitted that belongs before a later date
+    const rowsToInsert = [HEADER_ROW, ...rowsToAdd];
     await insertSheetRows(sheetTitle, firstLaterRowIndex, rowsToInsert);
     try {
       await formatRowLikeHeader(sheetTitle, firstLaterRowIndex);
-      await adjustGpCellFontSize(sheetTitle, firstLaterRowIndex + 1, newGpNames);
-      await formatDataRow(sheetTitle, firstLaterRowIndex + 1);
+      for (let k = 0; k < rowsToAdd.length; k++) {
+        const targetRow = firstLaterRowIndex + 1 + k;
+        await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
+        await formatDataRow(sheetTitle, targetRow);
+      }
     } catch (_) {}
   } else {
     // Newer date (or first date in fresh sheet)
     const hasExistingData = rows.some(r => r && r.length >= 2 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y'));
     if (hasExistingData) {
-      const appendRes = await appendSheetRows(sheetTitle, rowsToInsert);
+      const rowsToAppend = [HEADER_ROW, ...rowsToAdd];
+      const appendRes = await appendSheetRows(sheetTitle, rowsToAppend);
       try {
         const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
         const headerRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
         await formatRowLikeHeader(sheetTitle, headerRowIdx);
-        await adjustGpCellFontSize(sheetTitle, headerRowIdx + 1, newGpNames);
-        await formatDataRow(sheetTitle, headerRowIdx + 1);
+        for (let k = 0; k < rowsToAdd.length; k++) {
+          const targetRow = headerRowIdx + 1 + k;
+          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
+          await formatDataRow(sheetTitle, targetRow);
+        }
       } catch (_) {}
     } else {
       // First date in fresh sheet (row 2 is already HEADER_ROW)
-      const appendRes = await appendSheetRows(sheetTitle, [
-        [
-          1,
-          formattedDate,
-          deoName,
-          newGpNames,
-          dayAmount,
-          nightAmount,
-          totalAmount,
-          rejectAmount,
-          mobile,
-          wfhQtyVal,
-          wfhGpVal
-        ]
-      ]);
+      const appendRes = await appendSheetRows(sheetTitle, rowsToAdd);
       try {
         const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
-        const newRowIdx = match ? parseInt(match[1], 10) : 3;
-        await adjustGpCellFontSize(sheetTitle, newRowIdx, newGpNames);
-        await formatDataRow(sheetTitle, newRowIdx);
+        const startRowIdx = match ? parseInt(match[1], 10) : 3;
+        for (let k = 0; k < rowsToAdd.length; k++) {
+          const targetRow = startRowIdx + k;
+          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
+          await formatDataRow(sheetTitle, targetRow);
+        }
       } catch (_) {}
     }
   }
@@ -516,7 +469,8 @@ export async function updateSubmission(
 ) {
   try {
     const session = await getSession();
-    if (session?.allowedGps && session.allowedGps.length > 0) {
+    const isAllGp = isAllGpAccess(session?.gp) || (session?.allowedGps && session.allowedGps.length >= GP_LIST.length);
+    if (!isAllGp && session?.allowedGps && session.allowedGps.length > 0) {
       for (const item of data.items) {
         const canonical = canonicalGp(item.gpName);
         if (!session.allowedGps.includes(canonical)) {
@@ -582,17 +536,46 @@ export async function updateSubmission(
       } catch (_) {}
     }
 
-    const dayAmount = data.items
-      .filter(item => item.shift === 'DAY')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const wfhQtyVal = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty)) && Number(data.workFromHomeQty) > 0)
+      ? Number(data.workFromHomeQty)
+      : '';
+    const wfhGpVal = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
 
-    const nightAmount = data.items
-      .filter(item => item.shift === 'NIGHT')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    // Group items by distinct GP
+    const distinctGps: string[] = [];
+    data.items.forEach(item => {
+      const cGp = canonicalGp(item.gpName?.trim() || '');
+      if (cGp && !distinctGps.includes(cGp)) {
+        distinctGps.push(cGp);
+      }
+    });
 
-    const totalAmount = dayAmount + nightAmount;
-    const rejectAmount = data.items.reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
-    const gpNames = Array.from(new Set(data.items.map(item => item.gpName.trim()).filter(Boolean))).join('+');
+    if (distinctGps.length === 0 && data.items.length > 0) {
+      distinctGps.push(canonicalGp(data.items[0].gpName?.trim() || '') || data.items[0].gpName?.trim() || '');
+    }
+
+    const gpRowsData = distinctGps.map((gp, idx) => {
+      const gpItems = data.items.filter(item => canonicalGp(item.gpName?.trim() || '') === gp);
+      const dayAmount = gpItems
+        .filter(item => item.shift === 'DAY')
+        .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const nightAmount = gpItems
+        .filter(item => item.shift === 'NIGHT')
+        .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const totalAmount = dayAmount + nightAmount;
+      const rejectAmount = gpItems
+        .reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
+
+      return {
+        gpName: gp,
+        dayAmount,
+        nightAmount,
+        totalAmount,
+        rejectAmount,
+        wfhQty: idx === 0 ? wfhQtyVal : '',
+        wfhGp: idx === 0 ? wfhGpVal : '',
+      };
+    });
 
     const currentRows = await getSheetValues(originalSheetTitle, `A${targetRowIdx}:L${targetRowIdx}`);
     const currentRowData = extractRowData(currentRows[0] || []);
@@ -615,32 +598,52 @@ export async function updateSubmission(
         error: 'রিপোর্ট সাবমিট করার ৩০ মিনিট পার হয়ে গেছে। এটি আর এডিট করা যাবে না।'
       };
     }
-    const originalTimestamp = rawTimestamp || new Date().toISOString();
 
-    const wfhQtyVal = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty)) && Number(data.workFromHomeQty) > 0)
-      ? Number(data.workFromHomeQty)
-      : '';
-    const wfhGpVal = data.workFromHomeGp ? canonicalGp(data.workFromHomeGp) : '';
-
+    const firstGp = gpRowsData[0];
     const updatedRow = [
       slNo,
       formattedDate,
       deoName,
-      gpNames,
-      dayAmount,
-      nightAmount,
-      totalAmount,
-      rejectAmount,
+      firstGp.gpName,
+      firstGp.dayAmount,
+      firstGp.nightAmount,
+      firstGp.totalAmount,
+      firstGp.rejectAmount,
       mobile,
-      wfhQtyVal,
-      wfhGpVal
+      firstGp.wfhQty,
+      firstGp.wfhGp
     ];
 
     await updateSheetRow(originalSheetTitle, targetRowIdx, updatedRow);
     try {
-      await adjustGpCellFontSize(originalSheetTitle, targetRowIdx, gpNames);
+      await adjustGpCellFontSize(originalSheetTitle, targetRowIdx, firstGp.gpName);
       await formatDataRow(originalSheetTitle, targetRowIdx);
     } catch (_) {}
+
+    // If more than 1 GP was included in the update, insert subsequent GPs into next rows
+    if (gpRowsData.length > 1) {
+      const additionalRows = gpRowsData.slice(1).map((gpData) => [
+        slNo,
+        formattedDate,
+        deoName,
+        gpData.gpName,
+        gpData.dayAmount,
+        gpData.nightAmount,
+        gpData.totalAmount,
+        gpData.rejectAmount,
+        mobile,
+        gpData.wfhQty,
+        gpData.wfhGp
+      ]);
+      await insertSheetRows(originalSheetTitle, targetRowIdx + 1, additionalRows);
+      for (let k = 0; k < additionalRows.length; k++) {
+        const nextRow = targetRowIdx + 1 + k;
+        try {
+          await adjustGpCellFontSize(originalSheetTitle, nextRow, gpRowsData[k + 1].gpName);
+          await formatDataRow(originalSheetTitle, nextRow);
+        } catch (_) {}
+      }
+    }
 
     safeRevalidate();
     return { success: true };

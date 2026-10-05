@@ -3,6 +3,7 @@ import { PlusCircle, Edit, CheckCircle, X, UserCheck } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import LogoutButton from "@/components/logout-button";
 import { redirect } from "next/navigation";
+import { cn, isAllGpAccess } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +29,13 @@ export default async function Home(props: { searchParams?: Promise<{ success?: s
               <span className="font-bold text-gray-900 truncate">{sessionUser.name || 'DEO User'}</span>
               <span className="text-[11px] sm:text-xs text-gray-500 font-mono">({sessionUser.mobile})</span>
               {sessionUser.gp && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-orange-100 text-orange-800 border border-orange-200 w-fit">
-                  GP: {sessionUser.gp}
+                <span className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border w-fit",
+                  isAllGpAccess(sessionUser.gp)
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-orange-100 text-orange-800 border-orange-200"
+                )}>
+                  {isAllGpAccess(sessionUser.gp) ? "All GP Access" : `GP: ${sessionUser.gp}`}
                 </span>
               )}
             </div>

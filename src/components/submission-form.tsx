@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Loader2, ArrowLeft, CheckCircle, Eye, Check, Lock, Home } from 'lucide-react';
 import { createSubmission, updateSubmission } from '@/app/actions/submissions';
 import { useRouter } from 'next/navigation';
-import { cn, GP_LIST, WFH_GP_LIST, canonicalGp, parseAllowedGps } from '@/lib/utils';
+import { cn, GP_LIST, WFH_GP_LIST, canonicalGp, parseAllowedGps, isAllGpAccess } from '@/lib/utils';
 
 const formSchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -56,12 +56,17 @@ export default function SubmissionForm({
   const effectiveInitialName = currentUser?.name || initialData?.name || '';
   const effectiveInitialMobile = currentUser?.mobile || initialData?.mobile || '';
 
-  const userAssignedGps = currentUser?.allowedGps && currentUser.allowedGps.length > 0
-    ? currentUser.allowedGps
-    : (currentUser?.gp ? parseAllowedGps(currentUser.gp) : []);
+  const rawUserGp = currentUser?.gp || '';
+  const isAllGp = isAllGpAccess(rawUserGp) || (currentUser?.allowedGps && currentUser.allowedGps.length >= GP_LIST.length);
 
-  const hasSpecificGps = userAssignedGps.length > 0;
-  const defaultGp = hasSpecificGps ? userAssignedGps[0] : '';
+  const userAssignedGps = isAllGp
+    ? [...GP_LIST]
+    : (currentUser?.allowedGps && currentUser.allowedGps.length > 0
+        ? currentUser.allowedGps
+        : (rawUserGp ? parseAllowedGps(rawUserGp) : []));
+
+  const hasSpecificGps = !isAllGp && userAssignedGps.length > 0 && userAssignedGps.length < GP_LIST.length;
+  const defaultGp = (hasSpecificGps && userAssignedGps.length === 1) ? userAssignedGps[0] : '';
 
   const {
     register,
@@ -436,6 +441,11 @@ export default function SubmissionForm({
                   {hasSpecificGps && (
                     <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded">
                       Assigned GP
+                    </span>
+                  )}
+                  {isAllGp && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                      All GP Access
                     </span>
                   )}
                 </div>

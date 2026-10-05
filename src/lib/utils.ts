@@ -94,8 +94,27 @@ export function canonicalGp(raw: string): string {
   return matchCanonicalGp(raw);
 }
 
+export function isAllGpAccess(rawGp?: string): boolean {
+  if (!rawGp) return false;
+  const s = rawGp.trim().toUpperCase().replace(/[^A-Z0-9*]/g, '');
+  return (
+    s === 'ALL' ||
+    s === 'ALLGP' ||
+    s === 'ALLGPS' ||
+    s === 'ALLGPACCESS' ||
+    s === '*' ||
+    s === 'ANY' ||
+    s.startsWith('ALLGP') ||
+    s === 'ALLGRAMPANCHAYAT' ||
+    s === 'ALLGRAMPANCHAYATS'
+  );
+}
+
 export function parseAllowedGps(rawGp?: string): string[] {
   if (!rawGp || !rawGp.trim()) return [];
+  if (isAllGpAccess(rawGp)) {
+    return [...GP_LIST];
+  }
   const parts = rawGp.split(/[,+/;&]/).map(p => p.trim()).filter(Boolean);
   const matched = parts
     .map(p => matchCanonicalGp(p))
