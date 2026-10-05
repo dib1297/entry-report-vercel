@@ -228,7 +228,7 @@ export default function SubmissionForm({
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-gray-600 font-medium">Reject:</span>
+                <span className="text-gray-600 font-medium">Problem:</span>
                 <span className="font-bold text-rose-600 text-base">{item.problemAmount.toLocaleString('en-IN')}</span>
               </div>
             </div>
@@ -262,7 +262,7 @@ export default function SubmissionForm({
             <span className="font-bold text-gray-900 text-lg">{totalAmount.toLocaleString('en-IN')}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="font-semibold text-gray-700">Total Reject:</span>
+            <span className="font-semibold text-gray-700">Total Problem:</span>
             <span className="font-bold text-rose-600 text-lg">{totalProblem.toLocaleString('en-IN')}</span>
           </div>
         </div>
@@ -517,7 +517,7 @@ export default function SubmissionForm({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700">Reject</label>
+                <label className="text-xs font-semibold text-gray-700">Problem</label>
                 <input 
                   type="number" 
                   step="any"

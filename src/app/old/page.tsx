@@ -194,12 +194,12 @@ export default async function OldRecordsPage(props: {
                       </span>
                     </div>
                     <div>
-                      <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">Total / Reject</p>
+                      <p className="text-[11px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider">Total / Problem</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="font-bold text-gray-900 text-sm sm:text-base">{total.toLocaleString('en-IN')}</span>
                         {reject > 0 && (
                           <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">
-                            Rej: {reject}
+                            Prob: {reject}
                           </span>
                         )}
                         {(sub.workFromHomeQty !== undefined && sub.workFromHomeQty > 0) && (
@@ -236,7 +236,7 @@ export default async function OldRecordsPage(props: {
                       <span>Day: <strong className="text-gray-800">{day}</strong></span>
                       <span>Night: <strong className="text-gray-800">{night}</strong></span>
                       <span>Total: <strong className="text-gray-800">{total}</strong></span>
-                      {reject > 0 && <span>Reject: <strong className="text-rose-600">{reject}</strong></span>}
+                      {reject > 0 && <span>Problem: <strong className="text-rose-600">{reject}</strong></span>}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-gray-500">Sheet:</span>
@@ -274,7 +274,7 @@ export default async function OldRecordsPage(props: {
                             <span className="font-bold text-gray-900">{item.amount}</span>
                           </div>
                           <div>
-                            <span className="text-gray-500">Reject: </span>
+                            <span className="text-gray-500">Problem: </span>
                             <span className="font-bold text-rose-600">{item.problemAmount}</span>
                           </div>
                         </div>

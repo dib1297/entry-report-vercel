@@ -25,7 +25,7 @@ const HEADER_ROW = [
   "DAY",
   "NIGHT",
   "TOTAL",
-  "REJECT",
+  "PROBLEM",
   "MOBILE",
   "WORK F HOME QTY",
   "WORK F HOME GP"
