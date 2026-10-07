@@ -273,6 +273,7 @@ export async function formatTotalRow(sheetTitle: string, rowIndex: number) {
   const sheetId = sheetMeta.properties.sheetId;
 
   const border = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } };
+  const bg = { red: 1, green: 1, blue: 0 }; // Yellow (#FFFF00)
 
   const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
   await auth.request({
@@ -291,6 +292,7 @@ export async function formatTotalRow(sheetTitle: string, rowIndex: number) {
             },
             cell: {
               userEnteredFormat: {
+                backgroundColor: bg,
                 verticalAlignment: 'MIDDLE',
                 borders: {
                   top: border,
@@ -300,7 +302,7 @@ export async function formatTotalRow(sheetTitle: string, rowIndex: number) {
                 },
               },
             },
-            fields: 'userEnteredFormat.verticalAlignment,userEnteredFormat.borders',
+            fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.verticalAlignment,userEnteredFormat.borders',
           },
         },
         {
@@ -386,7 +388,7 @@ export async function formatGrandTotalRow(sheetTitle: string, rowIndex: number) 
   const sheetId = sheetMeta.properties.sheetId;
 
   const border = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } };
-  const bg = { red: 0.94, green: 0.94, blue: 0.94 };
+  const bg = { red: 0.75, green: 0.55, blue: 0.9 }; // Purple (#BF8CE6)
 
   const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
   await auth.request({
