@@ -220,7 +220,17 @@ export async function adjustAllGpFontSizes(sheetTitle: string, rows: string[][])
   const requests: any[] = [];
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
-    if (r && r.length >= 4 && r[0] !== 'SL NO.' && r[1] !== 'DATE' && !r[0]?.includes('M M S B Y')) {
+    if (
+      r && 
+      r.length >= 4 && 
+      r[0] !== 'SL NO.' && 
+      r[1] !== 'DATE' && 
+      !r[0]?.includes('M M S B Y') &&
+      r[2] !== 'TOTAL' &&
+      r[3] !== 'TOTAL' &&
+      r[2] !== 'GRAND TOTAL' &&
+      r[3] !== 'GRAND TOTAL'
+    ) {
       const gpText = r[3] || '';
       const fontSize = calculateGpFontSize(gpText);
       requests.push({
@@ -253,6 +263,234 @@ export async function adjustAllGpFontSizes(sheetTitle: string, rows: string[][])
       data: { requests },
     });
   }
+}
+
+export async function formatTotalRow(sheetTitle: string, rowIndex: number) {
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) return;
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const border = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } };
+
+  const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await auth.request({
+    url: urlBatch,
+    method: 'POST',
+    data: {
+      requests: [
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 0,
+              endColumnIndex: 11,
+            },
+            cell: {
+              userEnteredFormat: {
+                verticalAlignment: 'MIDDLE',
+                borders: {
+                  top: border,
+                  bottom: border,
+                  left: border,
+                  right: border,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.verticalAlignment,userEnteredFormat.borders',
+          },
+        },
+        {
+          mergeCells: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 2,
+              endColumnIndex: 4,
+            },
+            mergeType: 'MERGE_ALL',
+          },
+        },
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 2,
+              endColumnIndex: 4,
+            },
+            cell: {
+              userEnteredFormat: {
+                horizontalAlignment: 'CENTER',
+                verticalAlignment: 'MIDDLE',
+                textFormat: {
+                  bold: true,
+                  fontSize: 10,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat',
+          },
+        },
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 4,
+              endColumnIndex: 8,
+            },
+            cell: {
+              userEnteredFormat: {
+                horizontalAlignment: 'CENTER',
+                verticalAlignment: 'MIDDLE',
+                textFormat: {
+                  bold: true,
+                  fontSize: 10,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat',
+          },
+        },
+        {
+          updateDimensionProperties: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex - 1,
+              endIndex: rowIndex,
+            },
+            properties: {
+              pixelSize: 33,
+            },
+            fields: 'pixelSize',
+          },
+        },
+      ],
+    },
+  });
+}
+
+export async function formatGrandTotalRow(sheetTitle: string, rowIndex: number) {
+  const { auth, spreadsheetId } = getSheetsAuth();
+  const meta = await getSpreadsheetMetadata();
+  const sheetMeta = meta.sheets?.find((s: any) => s.properties.title === sheetTitle);
+  if (!sheetMeta) return;
+  const sheetId = sheetMeta.properties.sheetId;
+
+  const border = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } };
+  const bg = { red: 0.94, green: 0.94, blue: 0.94 };
+
+  const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await auth.request({
+    url: urlBatch,
+    method: 'POST',
+    data: {
+      requests: [
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 0,
+              endColumnIndex: 11,
+            },
+            cell: {
+              userEnteredFormat: {
+                backgroundColor: bg,
+                verticalAlignment: 'MIDDLE',
+                borders: {
+                  top: border,
+                  bottom: border,
+                  left: border,
+                  right: border,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.backgroundColor,userEnteredFormat.verticalAlignment,userEnteredFormat.borders',
+          },
+        },
+        {
+          mergeCells: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 2,
+              endColumnIndex: 4,
+            },
+            mergeType: 'MERGE_ALL',
+          },
+        },
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 2,
+              endColumnIndex: 4,
+            },
+            cell: {
+              userEnteredFormat: {
+                horizontalAlignment: 'CENTER',
+                verticalAlignment: 'MIDDLE',
+                textFormat: {
+                  bold: true,
+                  fontSize: 10,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat',
+          },
+        },
+        {
+          repeatCell: {
+            range: {
+              sheetId: sheetId,
+              startRowIndex: rowIndex - 1,
+              endRowIndex: rowIndex,
+              startColumnIndex: 4,
+              endColumnIndex: 8,
+            },
+            cell: {
+              userEnteredFormat: {
+                horizontalAlignment: 'CENTER',
+                verticalAlignment: 'MIDDLE',
+                textFormat: {
+                  bold: true,
+                  fontSize: 10,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.horizontalAlignment,userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat',
+          },
+        },
+        {
+          updateDimensionProperties: {
+            range: {
+              sheetId: sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex - 1,
+              endIndex: rowIndex,
+            },
+            properties: {
+              pixelSize: 33,
+            },
+            fields: 'pixelSize',
+          },
+        },
+      ],
+    },
+  });
 }
 
 export async function formatDataRow(sheetTitle: string, rowIndex: number) {

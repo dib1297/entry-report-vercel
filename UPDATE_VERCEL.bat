@@ -12,7 +12,9 @@ cd /d "%~dp0"
 
 echo [1/3] Adding changes and committing...
 git add .
-git commit -m "Add DEO Login Portal with Captcha and Google Sheets Auth"
+set "MSG=%~1"
+if "%MSG%"=="" set "MSG=Fix total and grand total auto sum formulas on new report entry"
+git commit -m "%MSG%"
 
 echo [2/3] Connecting to GitHub (dib1297/entry-report-vercel)...
 echo [3/3] Pushing latest updates to main branch...
