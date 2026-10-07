@@ -388,7 +388,7 @@ export async function formatGrandTotalRow(sheetTitle: string, rowIndex: number) 
   const sheetId = sheetMeta.properties.sheetId;
 
   const border = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } };
-  const bg = { red: 0.75, green: 0.55, blue: 0.9 }; // Purple (#BF8CE6)
+  const bg = { red: 191 / 255, green: 140 / 255, blue: 229 / 255 }; // Purple (#BF8CE5)
 
   const urlBatch = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
   await auth.request({
