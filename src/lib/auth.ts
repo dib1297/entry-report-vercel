@@ -20,7 +20,11 @@ export interface SessionUser {
   allowedGps?: string[];
 }
 
+let cachedAuthClient: { auth: JWT; spreadsheetId: string } | null = null;
+
 export function getAuthSheetsClient() {
+  if (cachedAuthClient) return cachedAuthClient;
+
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   const usersSheetId = process.env.GOOGLE_USERS_SHEET_ID || '1zdJuU27q4oNgsVHm8O0JD-pZJ6Q-8iHRL23JD9IbZ2Q';
@@ -35,7 +39,8 @@ export function getAuthSheetsClient() {
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 
-  return { auth, spreadsheetId: usersSheetId };
+  cachedAuthClient = { auth, spreadsheetId: usersSheetId };
+  return cachedAuthClient;
 }
 
 export function cleanMobile(num: any): string {
@@ -53,28 +58,29 @@ export function cleanMobile(num: any): string {
 }
 
 let liveUserCache: { timestamp: number; data: UserRecord[] } | null = null;
+let cachedUserSheetTitle: string = 'Sheet1';
+let userSheetTitleFetchedAt: number = 0;
 
 export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
   const { auth, spreadsheetId } = getAuthSheetsClient();
 
-  // 1. Fetch spreadsheet metadata to get the first sheet's title (no-cache)
-  let sheetTitle = 'Sheet1';
-  try {
-    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
-    const metaRes: any = await auth.request({ 
-      url: metaUrl,
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
+  // 1. Fetch spreadsheet metadata to get the first sheet's title (cached for 1 hour)
+  const now = Date.now();
+  if (now - userSheetTitleFetchedAt > 60 * 60 * 1000) {
+    try {
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
+      const metaRes: any = await auth.request({ 
+        url: metaUrl,
+      });
+      if (metaRes.data?.sheets?.length > 0) {
+        cachedUserSheetTitle = metaRes.data.sheets[0].properties.title;
+        userSheetTitleFetchedAt = now;
       }
-    });
-    if (metaRes.data?.sheets?.length > 0) {
-      sheetTitle = metaRes.data.sheets[0].properties.title;
+    } catch (err: any) {
+      console.error('Error fetching sheet metadata:', err);
     }
-  } catch (err: any) {
-    console.error('Error fetching sheet metadata:', err);
-    throw err;
   }
+  const sheetTitle = cachedUserSheetTitle;
 
   // 2. Fetch rows from the sheet (live, always fresh)
   const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${sheetTitle}'!A1:Z`)}?valueRenderOption=FORMATTED_VALUE`;
@@ -175,7 +181,7 @@ export async function fetchUsersFromGoogleSheet(): Promise<UserRecord[]> {
 
 export async function getLiveUsersCached(): Promise<UserRecord[]> {
   const now = Date.now();
-  if (liveUserCache && (now - liveUserCache.timestamp) < 5000) {
+  if (liveUserCache && (now - liveUserCache.timestamp) < 15000) {
     return liveUserCache.data;
   }
   const data = await fetchUsersFromGoogleSheet();

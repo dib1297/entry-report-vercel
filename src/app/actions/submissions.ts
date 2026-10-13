@@ -2,7 +2,7 @@
 
 import { normalizeName, canonicalGp, isAllGpAccess, GP_LIST } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
-import { getSession, fetchUsersFromGoogleSheet } from '@/lib/auth';
+import { getSession, getLiveUsersCached } from '@/lib/auth';
 import { 
   getSheetValues, 
   appendSheetRows, 
@@ -16,7 +16,15 @@ import {
   formatDataRow,
   clearColumnL,
   formatTotalRow,
-  formatGrandTotalRow
+  formatGrandTotalRow,
+  getSheetId,
+  batchUpdateSpreadsheet,
+  batchUpdateValues,
+  buildDataRowFormatRequests,
+  buildHeaderFormatRequests,
+  buildTotalRowFormatRequests,
+  buildGrandTotalRowFormatRequests,
+  calculateGpFontSize
 } from '@/lib/google-sheets';
 
 const HEADER_ROW = [
@@ -88,14 +96,14 @@ function extractRowData(r: string[]) {
   };
 }
 
-const THIRTY_MINUTES_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
+const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
 function safeRevalidate() {
   try {
     revalidatePath('/old');
     revalidatePath('/');
   } catch (_) {
-    // Intentionally ignored when invoked outside Next.js request context (e.g. testing/scripts)
+    // Intentionally ignored when invoked outside Next.js request context
   }
 }
 
@@ -161,201 +169,139 @@ function checkRowType(r: string[]) {
 }
 
 export async function syncSheetTotals(sheetTitle: string) {
-  let rows = await getSheetValues(sheetTitle, 'A1:L');
-  if (!rows || rows.length < 2) return;
+  try {
+    const rows = await getSheetValues(sheetTitle, 'A1:L');
+    if (!rows || rows.length < 2) return;
 
-  // 1. Find the very last data row in the sheet
-  let lastDataRowIdx = -1;
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i] || [];
-    if (checkRowType(r) === 'DATA') {
-      lastDataRowIdx = i + 1;
+    let lastDataRowIdx = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i] || [];
+      if (checkRowType(r) === 'DATA') {
+        lastDataRowIdx = i + 1;
+      }
     }
-  }
+    if (lastDataRowIdx <= 0) return;
 
-  if (lastDataRowIdx <= 0) return; // No data rows in sheet
-
-  // 2. Remove any misplaced GRAND TOTAL row that is above or at lastDataRowIdx
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const r = rows[i] || [];
-    const rowIdx = i + 1;
-    if (checkRowType(r) === 'GRAND_TOTAL' && rowIdx <= lastDataRowIdx) {
-      await deleteSheetRow(sheetTitle, rowIdx);
-      rows = await getSheetValues(sheetTitle, 'A1:L');
+    interface DateSection {
+      date: string;
+      firstDataRow: number;
+      lastDataRow: number;
+      totalRow: number | null;
     }
-  }
 
-  // Also remove duplicate GRAND TOTAL rows if more than one exists
-  const grandTotalIndices: number[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i] || [];
-    if (checkRowType(r) === 'GRAND_TOTAL') {
-      grandTotalIndices.push(i + 1);
-    }
-  }
-  while (grandTotalIndices.length > 1) {
-    const toDel = grandTotalIndices.shift()!;
-    await deleteSheetRow(sheetTitle, toDel);
-    rows = await getSheetValues(sheetTitle, 'A1:L');
-  }
+    const dateSections: DateSection[] = [];
+    let currentSection: DateSection | null = null;
 
-  // 3. Identify all contiguous date sections
-  interface DateSection {
-    date: string;
-    firstDataRow: number; // 1-based
-    lastDataRow: number;  // 1-based
-    totalRow: number | null; // 1-based
-  }
+    for (let i = 0; i < rows.length; i++) {
+      const rowIdx = i + 1;
+      const r = rows[i] || [];
+      const type = checkRowType(r);
+      const rowDate = toDDMMYYYY(r[1] || '');
 
-  const dateSections: DateSection[] = [];
-  let currentSection: DateSection | null = null;
-
-  for (let i = 0; i < rows.length; i++) {
-    const rowIdx = i + 1;
-    const r = rows[i] || [];
-    const type = checkRowType(r);
-    const rowDate = toDDMMYYYY(r[1] || '');
-
-    if (type === 'DATA') {
-      if (!currentSection || currentSection.date !== rowDate) {
-        currentSection = {
-          date: rowDate,
-          firstDataRow: rowIdx,
-          lastDataRow: rowIdx,
-          totalRow: null
-        };
-        dateSections.push(currentSection);
-      } else {
-        // If a totalRow was already recorded for this date, but more data appeared below it,
-        // the old totalRow is trapped in the middle. We delete it and reset totalRow to null.
-        if (currentSection.totalRow) {
-          await deleteSheetRow(sheetTitle, currentSection.totalRow);
-          return syncSheetTotals(sheetTitle);
+      if (type === 'DATA') {
+        if (!currentSection || currentSection.date !== rowDate) {
+          currentSection = {
+            date: rowDate,
+            firstDataRow: rowIdx,
+            lastDataRow: rowIdx,
+            totalRow: null
+          };
+          dateSections.push(currentSection);
+        } else {
+          currentSection.lastDataRow = rowIdx;
         }
-        currentSection.lastDataRow = rowIdx;
-      }
-    } else if (type === 'TOTAL' && currentSection) {
-      if (!currentSection.totalRow) {
-        currentSection.totalRow = rowIdx;
-      } else {
-        // Duplicate total row for this date section: delete it
-        await deleteSheetRow(sheetTitle, rowIdx);
-        return syncSheetTotals(sheetTitle);
-      }
-    }
-  }
-
-  if (dateSections.length === 0) return;
-
-  // 4. Ensure each date section has its TOTAL row directly at lastDataRow + 1
-  for (const sec of dateSections) {
-    const startRow = sec.firstDataRow;
-    const endRow = sec.lastDataRow;
-    const totalRowValues = [
-      '',
-      '',
-      'TOTAL',
-      '',
-      `=SUM(E${startRow}:E${endRow})`,
-      `=SUM(F${startRow}:F${endRow})`,
-      `=SUM(G${startRow}:G${endRow})`,
-      `=SUM(H${startRow}:H${endRow})`,
-      '',
-      '',
-      ''
-    ];
-
-    if (sec.totalRow) {
-      if (sec.totalRow !== endRow + 1) {
-        await deleteSheetRow(sheetTitle, sec.totalRow);
-        await insertSheetRows(sheetTitle, endRow + 1, [totalRowValues]);
-        try {
-          await formatTotalRow(sheetTitle, endRow + 1);
-        } catch (_) {}
-        return syncSheetTotals(sheetTitle);
-      } else {
-        await updateSheetRow(sheetTitle, sec.totalRow, totalRowValues);
-        try {
-          await formatTotalRow(sheetTitle, sec.totalRow);
-        } catch (_) {}
-      }
-    } else {
-      const insertAt = sec.lastDataRow + 1;
-      await insertSheetRows(sheetTitle, insertAt, [totalRowValues]);
-      try {
-        await formatTotalRow(sheetTitle, insertAt);
-      } catch (_) {}
-      return syncSheetTotals(sheetTitle);
-    }
-  }
-
-  // 5. Ensure GRAND TOTAL row is positioned at the very bottom
-  rows = await getSheetValues(sheetTitle, 'A1:L');
-  let currentGrandIdx = -1;
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i] || [];
-    if (checkRowType(r) === 'GRAND_TOTAL') {
-      currentGrandIdx = i + 1;
-      break;
-    }
-  }
-
-  let lastDateTotalRow = -1;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const r = rows[i] || [];
-    if (checkRowType(r) === 'TOTAL') {
-      lastDateTotalRow = i + 1;
-      break;
-    }
-  }
-
-  if (lastDateTotalRow > 0) {
-    const targetGrandRow = lastDateTotalRow + 1;
-    const grandFormulaLimit = targetGrandRow - 1;
-    const grandRowValues = [
-      '',
-      '',
-      'GRAND TOTAL',
-      '',
-      `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", E$2:E${grandFormulaLimit})`,
-      `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", F$2:F${grandFormulaLimit})`,
-      `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", G$2:G${grandFormulaLimit})`,
-      `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", H$2:H${grandFormulaLimit})`,
-      '',
-      '',
-      ''
-    ];
-
-    if (currentGrandIdx > 0 && currentGrandIdx === targetGrandRow) {
-      await updateSheetRow(sheetTitle, currentGrandIdx, grandRowValues);
-      try {
-        await formatGrandTotalRow(sheetTitle, currentGrandIdx);
-      } catch (_) {}
-    } else if (currentGrandIdx > 0 && currentGrandIdx !== targetGrandRow) {
-      await deleteSheetRow(sheetTitle, currentGrandIdx);
-      const refreshedRows = await getSheetValues(sheetTitle, 'A1:L');
-      let newLastTotal = -1;
-      for (let i = refreshedRows.length - 1; i >= 0; i--) {
-        const r = refreshedRows[i] || [];
-        if (checkRowType(r) === 'TOTAL') {
-          newLastTotal = i + 1;
-          break;
+      } else if (type === 'TOTAL' && currentSection) {
+        if (!currentSection.totalRow) {
+          currentSection.totalRow = rowIdx;
         }
       }
-      const newTarget = newLastTotal + 1;
-      await insertSheetRows(sheetTitle, newTarget, [grandRowValues]);
-      try {
-        await formatGrandTotalRow(sheetTitle, newTarget);
-      } catch (_) {}
-    } else {
-      await insertSheetRows(sheetTitle, targetGrandRow, [grandRowValues]);
-      try {
-        await formatGrandTotalRow(sheetTitle, targetGrandRow);
-      } catch (_) {}
     }
+
+    if (dateSections.length === 0) return;
+
+    const valuesUpdates: { range: string; values: any[][] }[] = [];
+
+    for (const sec of dateSections) {
+      const startRow = sec.firstDataRow;
+      const endRow = sec.lastDataRow;
+      const totalRowValues = [
+        '',
+        '',
+        'TOTAL',
+        '',
+        `=SUM(E${startRow}:E${endRow})`,
+        `=SUM(F${startRow}:F${endRow})`,
+        `=SUM(G${startRow}:G${endRow})`,
+        `=SUM(H${startRow}:H${endRow})`,
+        '',
+        '',
+        ''
+      ];
+
+      if (sec.totalRow) {
+        const existingRow = rows[sec.totalRow - 1] || [];
+        if (
+          existingRow[4] !== totalRowValues[4] ||
+          existingRow[5] !== totalRowValues[5] ||
+          existingRow[6] !== totalRowValues[6] ||
+          existingRow[7] !== totalRowValues[7]
+        ) {
+          valuesUpdates.push({
+            range: `A${sec.totalRow}:K${sec.totalRow}`,
+            values: [totalRowValues]
+          });
+        }
+      }
+    }
+
+    let grandIdx = -1;
+    let lastDateTotal = -1;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i] || [];
+      if (checkRowType(r) === 'TOTAL' && lastDateTotal === -1) {
+        lastDateTotal = i + 1;
+      }
+      if (checkRowType(r) === 'GRAND_TOTAL') {
+        grandIdx = i + 1;
+      }
+    }
+
+    if (lastDateTotal > 0 && grandIdx > 0) {
+      const limit = grandIdx - 1;
+      const grandRowValues = [
+        '',
+        '',
+        'GRAND TOTAL',
+        '',
+        `=SUMIF(C$2:C${limit}, "TOTAL", E$2:E${limit})`,
+        `=SUMIF(C$2:C${limit}, "TOTAL", F$2:F${limit})`,
+        `=SUMIF(C$2:C${limit}, "TOTAL", G$2:G${limit})`,
+        `=SUMIF(C$2:C${limit}, "TOTAL", H$2:H${limit})`,
+        '',
+        '',
+        ''
+      ];
+      const existingGrand = rows[grandIdx - 1] || [];
+      if (
+        existingGrand[4] !== grandRowValues[4] ||
+        existingGrand[5] !== grandRowValues[5] ||
+        existingGrand[6] !== grandRowValues[6] ||
+        existingGrand[7] !== grandRowValues[7]
+      ) {
+        valuesUpdates.push({
+          range: `A${grandIdx}:K${grandIdx}`,
+          values: [grandRowValues]
+        });
+      }
+    }
+
+    if (valuesUpdates.length > 0) {
+      await batchUpdateValues(sheetTitle, valuesUpdates);
+    }
+  } catch (err) {
+    console.error(`Error in syncSheetTotals for ${sheetTitle}:`, err);
   }
 }
-
 
 export async function createSubmission(data: {
   date: string;
@@ -377,10 +323,10 @@ export async function createSubmission(data: {
   let deoName = session?.name ? normalizeName(session.name) : normalizeName(data.name);
   let mobile = session?.mobile ? session.mobile.trim() : (data.mobile ? data.mobile.trim() : '');
 
-  // Live real-time sync with Google Sheet
+  // Live real-time sync with Google Sheet using fast cached users
   if (mobile) {
     try {
-      const liveUsers = await fetchUsersFromGoogleSheet();
+      const liveUsers = await getLiveUsersCached();
       const currentLive = liveUsers.find(u => u.mobile === mobile);
       if (currentLive) {
         if (currentLive.access === 'NO') {
@@ -403,20 +349,6 @@ export async function createSubmission(data: {
       }
     }
   }
-
-  // 1. Calculate Day & Night totals
-  const dayAmount = data.items
-    .filter(item => item.shift === 'DAY')
-    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
-  const nightAmount = data.items
-    .filter(item => item.shift === 'NIGHT')
-    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
-  const totalAmount = dayAmount + nightAmount;
-
-  const rejectAmount = data.items
-    .reduce((sum, item) => sum + (Number(item.problemAmount) || 0), 0);
 
   const wfhQtyVal = (data.workFromHomeQty !== undefined && data.workFromHomeQty !== null && !isNaN(Number(data.workFromHomeQty)) && Number(data.workFromHomeQty) > 0)
     ? Number(data.workFromHomeQty)
@@ -454,49 +386,49 @@ export async function createSubmission(data: {
       nightAmount,
       totalAmount,
       rejectAmount,
-      // Only attach WFH details to the first row of this submission
       wfhQty: idx === 0 ? wfhQtyVal : '',
       wfhGp: idx === 0 ? wfhGpVal : '',
     };
   });
 
-  // 2. Fetch existing rows from the target sheet
-  const rows = await getSheetValues(sheetTitle, 'A1:L');
+  // 2. Fetch existing rows and sheetId in parallel
+  const [rows, sheetId] = await Promise.all([
+    getSheetValues(sheetTitle, 'A1:L'),
+    getSheetId(sheetTitle),
+  ]);
 
-  // Ensure any existing repeated header rows in the sheet have exact same styling as Row 2
-  for (let i = 2; i < rows.length; i++) {
-    const r = rows[i];
-    if (r && r[0] === 'SL NO.' && r[1] === 'DATE') {
-      try {
-        await formatRowLikeHeader(sheetTitle, i + 1);
-      } catch (_) {}
-    }
-  }
-
-  // Ensure all existing rows have proper font size
-  try {
-    await adjustAllGpFontSizes(sheetTitle, rows);
-  } catch (_) {}
-
-  // 3. Check if this date already has an existing section in the sheet
-  let lastRowIndexForThisDate = -1; // 1-based index in sheet
+  // 3. Scan existing rows for date section & totals
+  let firstRowForThisDate = -1;
+  let lastRowIndexForThisDate = -1;
   let maxSlNoForThisDate = 0;
+  let existingTotalRowIdx = -1;
+  let grandTotalIdx = -1;
 
   for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (checkRowType(r) === 'DATA') {
+    const r = rows[i] || [];
+    const type = checkRowType(r);
+    const rowIdx = i + 1;
+
+    if (type === 'DATA') {
       const rowDate = toDDMMYYYY(r[1] || '');
       if (rowDate === formattedDate) {
-        lastRowIndexForThisDate = i + 1;
+        if (firstRowForThisDate === -1) firstRowForThisDate = rowIdx;
+        lastRowIndexForThisDate = rowIdx;
         const sl = parseInt(r[0], 10);
         if (!isNaN(sl) && sl > maxSlNoForThisDate) {
           maxSlNoForThisDate = sl;
         }
       }
+    } else if (type === 'TOTAL') {
+      if (lastRowIndexForThisDate > 0 && existingTotalRowIdx === -1) {
+        existingTotalRowIdx = rowIdx;
+      }
+    } else if (type === 'GRAND_TOTAL') {
+      grandTotalIdx = rowIdx;
     }
   }
 
-  // Case A: This date already has a section in the sheet
+  // ================= CASE A: DATE ALREADY HAS ROWS IN THE SHEET =================
   if (lastRowIndexForThisDate > 0) {
     const rowsToAdd = gpRowsData.map((gpData, idx) => {
       const nextSlNo = maxSlNoForThisDate + 1 + idx;
@@ -515,29 +447,109 @@ export async function createSubmission(data: {
       ];
     });
 
-    const insertAtRow = lastRowIndexForThisDate + 1;
-    await insertSheetRows(sheetTitle, insertAtRow, rowsToAdd);
-    for (let k = 0; k < rowsToAdd.length; k++) {
-      const targetRow = insertAtRow + k;
-      try {
-        await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
-        await formatDataRow(sheetTitle, targetRow);
-      } catch (_) {}
+    const count = rowsToAdd.length;
+    const insertAtRow = lastRowIndexForThisDate + 1; // 1-based index to insert
+    const newEndRow = lastRowIndexForThisDate + count;
+    const newTotalRowIdx = existingTotalRowIdx > 0 && existingTotalRowIdx >= insertAtRow
+      ? existingTotalRowIdx + count
+      : newEndRow + 1;
+    const newGrandTotalIdx = grandTotalIdx > 0 && grandTotalIdx >= insertAtRow
+      ? grandTotalIdx + count
+      : -1;
+
+    const totalRowValues = [
+      '',
+      '',
+      'TOTAL',
+      '',
+      `=SUM(E${firstRowForThisDate}:E${newEndRow})`,
+      `=SUM(F${firstRowForThisDate}:F${newEndRow})`,
+      `=SUM(G${firstRowForThisDate}:G${newEndRow})`,
+      `=SUM(H${firstRowForThisDate}:H${newEndRow})`,
+      '',
+      '',
+      ''
+    ];
+
+    // Combine insertDimension + formatting into a SINGLE batchUpdate
+    const batchRequests: any[] = [
+      {
+        insertDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: insertAtRow - 1,
+            endIndex: insertAtRow - 1 + count,
+          },
+          inheritFromBefore: true,
+        },
+      },
+      ...buildDataRowFormatRequests(sheetId, insertAtRow, newEndRow, gpRowsData.map(g => g.gpName)),
+    ];
+
+    // If there was previously no total row for this date section, insert and format it
+    let totalRowNeedsInsert = existingTotalRowIdx <= 0;
+    if (totalRowNeedsInsert) {
+      batchRequests.push(
+        {
+          insertDimension: {
+            range: {
+              sheetId,
+              dimension: 'ROWS',
+              startIndex: newTotalRowIdx - 1,
+              endIndex: newTotalRowIdx,
+            },
+            inheritFromBefore: true,
+          },
+        },
+        ...buildTotalRowFormatRequests(sheetId, newTotalRowIdx)
+      );
     }
 
-    try {
-      await syncSheetTotals(sheetTitle);
-    } catch (err) {
-      console.error(`Error syncing sheet totals for ${sheetTitle}:`, err);
+    await batchUpdateSpreadsheet(batchRequests);
+
+    // Combine all value writes (data rows + total row + grand total) into a SINGLE batchUpdateValues
+    const valuesBatch: { range: string; values: any[][] }[] = [
+      {
+        range: `A${insertAtRow}:K${newEndRow}`,
+        values: rowsToAdd,
+      },
+      {
+        range: `A${newTotalRowIdx}:K${newTotalRowIdx}`,
+        values: [totalRowValues],
+      },
+    ];
+
+    if (newGrandTotalIdx > 0) {
+      const grandFormulaLimit = newGrandTotalIdx - 1;
+      const grandRowValues = [
+        '',
+        '',
+        'GRAND TOTAL',
+        '',
+        `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", E$2:E${grandFormulaLimit})`,
+        `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", F$2:F${grandFormulaLimit})`,
+        `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", G$2:G${grandFormulaLimit})`,
+        `=SUMIF(C$2:C${grandFormulaLimit}, "TOTAL", H$2:H${grandFormulaLimit})`,
+        '',
+        '',
+        ''
+      ];
+      valuesBatch.push({
+        range: `A${newGrandTotalIdx}:K${newGrandTotalIdx}`,
+        values: [grandRowValues],
+      });
     }
+
+    await batchUpdateValues(sheetTitle, valuesBatch);
 
     safeRevalidate();
     return { success: true };
   }
 
-  // Case B: This date has no data rows in the sheet yet
+  // ================= CASE B: NEW DATE SECTION =================
   const targetTime = parseDateToTime(formattedDate);
-  let firstLaterRowIndex = -1; // 1-based index where a later date starts
+  let firstLaterRowIndex = -1;
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -545,10 +557,8 @@ export async function createSubmission(data: {
       const rowDate = toDDMMYYYY(r[1] || '');
       const rowTime = parseDateToTime(rowDate);
       if (rowTime > targetTime) {
-        // Found a later date section!
-        // If the row above is HEADER_ROW, insert before HEADER_ROW
         if (i > 0 && rows[i - 1][0] === 'SL NO.') {
-          firstLaterRowIndex = i; // 1-based index of HEADER_ROW
+          firstLaterRowIndex = i;
         } else {
           firstLaterRowIndex = i + 1;
         }
@@ -557,94 +567,308 @@ export async function createSubmission(data: {
     }
   }
 
-  const rowsToAdd = gpRowsData.map((gpData, idx) => {
-    const slNo = 1 + idx;
-    return [
-      slNo,
-      formattedDate,
-      deoName,
-      gpData.gpName,
-      gpData.dayAmount,
-      gpData.nightAmount,
-      gpData.totalAmount,
-      gpData.rejectAmount,
-      mobile,
-      gpData.wfhQty,
-      gpData.wfhGp
-    ];
-  });
+  const rowsToAdd = gpRowsData.map((gpData, idx) => [
+    1 + idx,
+    formattedDate,
+    deoName,
+    gpData.gpName,
+    gpData.dayAmount,
+    gpData.nightAmount,
+    gpData.totalAmount,
+    gpData.rejectAmount,
+    mobile,
+    gpData.wfhQty,
+    gpData.wfhGp
+  ]);
+
+  const count = rowsToAdd.length;
 
   if (firstLaterRowIndex > 0) {
     // Older date submitted that belongs before a later date
-    const rowsToInsert = [HEADER_ROW, ...rowsToAdd];
-    await insertSheetRows(sheetTitle, firstLaterRowIndex, rowsToInsert);
-    try {
-      await formatRowLikeHeader(sheetTitle, firstLaterRowIndex);
-      for (let k = 0; k < rowsToAdd.length; k++) {
-        const targetRow = firstLaterRowIndex + 1 + k;
-        await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
-        await formatDataRow(sheetTitle, targetRow);
-      }
-    } catch (_) {}
-  } else {
-    // Newer date (or first date in fresh sheet)
-    let grandTotalIdx = -1;
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      if (checkRowType(r) === 'GRAND_TOTAL') {
-        grandTotalIdx = i + 1;
-        break;
-      }
+    const insertAtRow = firstLaterRowIndex;
+    const totalRowsToInsert = 1 + count + 1; // Header + Data + Total
+    const headerRowIdx = insertAtRow;
+    const dataStartRow = insertAtRow + 1;
+    const dataEndRow = insertAtRow + count;
+    const totalRowIdx = insertAtRow + count + 1;
+
+    const totalRowValues = [
+      '',
+      '',
+      'TOTAL',
+      '',
+      `=SUM(E${dataStartRow}:E${dataEndRow})`,
+      `=SUM(F${dataStartRow}:F${dataEndRow})`,
+      `=SUM(G${dataStartRow}:G${dataEndRow})`,
+      `=SUM(H${dataStartRow}:H${dataEndRow})`,
+      '',
+      '',
+      ''
+    ];
+
+    const batchRequests: any[] = [
+      {
+        insertDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: insertAtRow - 1,
+            endIndex: insertAtRow - 1 + totalRowsToInsert,
+          },
+          inheritFromBefore: true,
+        },
+      },
+      ...buildHeaderFormatRequests(sheetId, headerRowIdx),
+      ...buildDataRowFormatRequests(sheetId, dataStartRow, dataEndRow, gpRowsData.map(g => g.gpName)),
+      ...buildTotalRowFormatRequests(sheetId, totalRowIdx),
+    ];
+
+    await batchUpdateSpreadsheet(batchRequests);
+
+    const newGrandTotalIdx = grandTotalIdx > 0 ? grandTotalIdx + totalRowsToInsert : -1;
+    const valuesBatch: { range: string; values: any[][] }[] = [
+      {
+        range: `A${headerRowIdx}:K${totalRowIdx}`,
+        values: [HEADER_ROW, ...rowsToAdd, totalRowValues],
+      },
+    ];
+
+    if (newGrandTotalIdx > 0) {
+      const grandLimit = newGrandTotalIdx - 1;
+      const grandRowValues = [
+        '',
+        '',
+        'GRAND TOTAL',
+        '',
+        `=SUMIF(C$2:C${grandLimit}, "TOTAL", E$2:E${grandLimit})`,
+        `=SUMIF(C$2:C${grandLimit}, "TOTAL", F$2:F${grandLimit})`,
+        `=SUMIF(C$2:C${grandLimit}, "TOTAL", G$2:G${grandLimit})`,
+        `=SUMIF(C$2:C${grandLimit}, "TOTAL", H$2:H${grandLimit})`,
+        '',
+        '',
+        ''
+      ];
+      valuesBatch.push({
+        range: `A${newGrandTotalIdx}:K${newGrandTotalIdx}`,
+        values: [grandRowValues],
+      });
     }
 
-    const hasExistingData = rows.some(r => checkRowType(r) === 'DATA');
-
-    if (grandTotalIdx > 0) {
-      // Insert right before GRAND TOTAL row (pushing GRAND TOTAL down)
-      const rowsToInsert = [HEADER_ROW, ...rowsToAdd];
-      await insertSheetRows(sheetTitle, grandTotalIdx, rowsToInsert);
-      try {
-        await formatRowLikeHeader(sheetTitle, grandTotalIdx);
-        for (let k = 0; k < rowsToAdd.length; k++) {
-          const targetRow = grandTotalIdx + 1 + k;
-          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
-          await formatDataRow(sheetTitle, targetRow);
-        }
-      } catch (_) {}
-    } else if (hasExistingData) {
-      const rowsToAppend = [HEADER_ROW, ...rowsToAdd];
-      const appendRes = await appendSheetRows(sheetTitle, rowsToAppend);
-      try {
-        const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
-        const headerRowIdx = match ? parseInt(match[1], 10) : (rows.length + 1);
-        await formatRowLikeHeader(sheetTitle, headerRowIdx);
-        for (let k = 0; k < rowsToAdd.length; k++) {
-          const targetRow = headerRowIdx + 1 + k;
-          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
-          await formatDataRow(sheetTitle, targetRow);
-        }
-      } catch (_) {}
-    } else {
-      // First date in fresh sheet (row 2 is already HEADER_ROW)
-      const appendRes = await appendSheetRows(sheetTitle, rowsToAdd);
-      try {
-        const match = appendRes?.updates?.updatedRange?.match(/A(\d+):/);
-        const startRowIdx = match ? parseInt(match[1], 10) : 3;
-        for (let k = 0; k < rowsToAdd.length; k++) {
-          const targetRow = startRowIdx + k;
-          await adjustGpCellFontSize(sheetTitle, targetRow, gpRowsData[k].gpName);
-          await formatDataRow(sheetTitle, targetRow);
-        }
-      } catch (_) {}
-    }
+    await batchUpdateValues(sheetTitle, valuesBatch);
+    safeRevalidate();
+    return { success: true };
   }
 
-  try {
-    await syncSheetTotals(sheetTitle);
-  } catch (err) {
-    console.error(`Error syncing sheet totals for ${sheetTitle}:`, err);
+  // Newer date (or first date in fresh sheet)
+  const hasExistingData = rows.some(r => checkRowType(r) === 'DATA');
+
+  if (grandTotalIdx > 0) {
+    const insertAtRow = grandTotalIdx;
+    const totalRowsToInsert = 1 + count + 1; // Header + Data + Total
+    const headerRowIdx = insertAtRow;
+    const dataStartRow = insertAtRow + 1;
+    const dataEndRow = insertAtRow + count;
+    const totalRowIdx = insertAtRow + count + 1;
+    const newGrandTotalIdx = grandTotalIdx + totalRowsToInsert;
+
+    const totalRowValues = [
+      '',
+      '',
+      'TOTAL',
+      '',
+      `=SUM(E${dataStartRow}:E${dataEndRow})`,
+      `=SUM(F${dataStartRow}:F${dataEndRow})`,
+      `=SUM(G${dataStartRow}:G${dataEndRow})`,
+      `=SUM(H${dataStartRow}:H${dataEndRow})`,
+      '',
+      '',
+      ''
+    ];
+
+    const grandLimit = newGrandTotalIdx - 1;
+    const grandRowValues = [
+      '',
+      '',
+      'GRAND TOTAL',
+      '',
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", E$2:E${grandLimit})`,
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", F$2:F${grandLimit})`,
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", G$2:G${grandLimit})`,
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", H$2:H${grandLimit})`,
+      '',
+      '',
+      ''
+    ];
+
+    const batchRequests: any[] = [
+      {
+        insertDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: insertAtRow - 1,
+            endIndex: insertAtRow - 1 + totalRowsToInsert,
+          },
+          inheritFromBefore: true,
+        },
+      },
+      ...buildHeaderFormatRequests(sheetId, headerRowIdx),
+      ...buildDataRowFormatRequests(sheetId, dataStartRow, dataEndRow, gpRowsData.map(g => g.gpName)),
+      ...buildTotalRowFormatRequests(sheetId, totalRowIdx),
+    ];
+
+    await batchUpdateSpreadsheet(batchRequests);
+
+    const valuesBatch: { range: string; values: any[][] }[] = [
+      {
+        range: `A${headerRowIdx}:K${totalRowIdx}`,
+        values: [HEADER_ROW, ...rowsToAdd, totalRowValues],
+      },
+      {
+        range: `A${newGrandTotalIdx}:K${newGrandTotalIdx}`,
+        values: [grandRowValues],
+      },
+    ];
+
+    await batchUpdateValues(sheetTitle, valuesBatch);
+    safeRevalidate();
+    return { success: true };
   }
 
+  if (hasExistingData) {
+    const insertAtRow = rows.length + 1;
+    const totalRowsToInsert = 1 + count + 1 + 1; // Header + Data + Total + Grand Total
+    const headerRowIdx = insertAtRow;
+    const dataStartRow = insertAtRow + 1;
+    const dataEndRow = insertAtRow + count;
+    const totalRowIdx = insertAtRow + count + 1;
+    const newGrandTotalIdx = totalRowIdx + 1;
+
+    const totalRowValues = [
+      '',
+      '',
+      'TOTAL',
+      '',
+      `=SUM(E${dataStartRow}:E${dataEndRow})`,
+      `=SUM(F${dataStartRow}:F${dataEndRow})`,
+      `=SUM(G${dataStartRow}:G${dataEndRow})`,
+      `=SUM(H${dataStartRow}:H${dataEndRow})`,
+      '',
+      '',
+      ''
+    ];
+
+    const grandLimit = newGrandTotalIdx - 1;
+    const grandRowValues = [
+      '',
+      '',
+      'GRAND TOTAL',
+      '',
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", E$2:E${grandLimit})`,
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", F$2:F${grandLimit})`,
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", G$2:G${grandLimit})`,
+      `=SUMIF(C$2:C${grandLimit}, "TOTAL", H$2:H${grandLimit})`,
+      '',
+      '',
+      ''
+    ];
+
+    const batchRequests: any[] = [
+      {
+        insertDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: insertAtRow - 1,
+            endIndex: insertAtRow - 1 + totalRowsToInsert,
+          },
+          inheritFromBefore: true,
+        },
+      },
+      ...buildHeaderFormatRequests(sheetId, headerRowIdx),
+      ...buildDataRowFormatRequests(sheetId, dataStartRow, dataEndRow, gpRowsData.map(g => g.gpName)),
+      ...buildTotalRowFormatRequests(sheetId, totalRowIdx),
+      ...buildGrandTotalRowFormatRequests(sheetId, newGrandTotalIdx),
+    ];
+
+    await batchUpdateSpreadsheet(batchRequests);
+
+    const valuesBatch: { range: string; values: any[][] }[] = [
+      {
+        range: `A${headerRowIdx}:K${newGrandTotalIdx}`,
+        values: [HEADER_ROW, ...rowsToAdd, totalRowValues, grandRowValues],
+      },
+    ];
+
+    await batchUpdateValues(sheetTitle, valuesBatch);
+    safeRevalidate();
+    return { success: true };
+  }
+
+  // First date in fresh sheet (row 2 is already HEADER_ROW)
+  const insertAtRow = 3;
+  const totalRowsToInsert = count + 1 + 1; // Data + Total + Grand Total
+  const dataStartRow = 3;
+  const dataEndRow = 3 + count - 1;
+  const totalRowIdx = dataEndRow + 1;
+  const newGrandTotalIdx = totalRowIdx + 1;
+
+  const totalRowValues = [
+    '',
+    '',
+    'TOTAL',
+    '',
+    `=SUM(E${dataStartRow}:E${dataEndRow})`,
+    `=SUM(F${dataStartRow}:F${dataEndRow})`,
+    `=SUM(G${dataStartRow}:G${dataEndRow})`,
+    `=SUM(H${dataStartRow}:H${dataEndRow})`,
+    '',
+    '',
+    ''
+  ];
+
+  const grandLimit = newGrandTotalIdx - 1;
+  const grandRowValues = [
+    '',
+    '',
+    'GRAND TOTAL',
+    '',
+    `=SUMIF(C$2:C${grandLimit}, "TOTAL", E$2:E${grandLimit})`,
+    `=SUMIF(C$2:C${grandLimit}, "TOTAL", F$2:F${grandLimit})`,
+    `=SUMIF(C$2:C${grandLimit}, "TOTAL", G$2:G${grandLimit})`,
+    `=SUMIF(C$2:C${grandLimit}, "TOTAL", H$2:H${grandLimit})`,
+    '',
+    '',
+    ''
+  ];
+
+  const batchRequests: any[] = [
+    {
+      insertDimension: {
+        range: {
+          sheetId,
+          dimension: 'ROWS',
+          startIndex: insertAtRow - 1,
+          endIndex: insertAtRow - 1 + totalRowsToInsert,
+        },
+        inheritFromBefore: true,
+      },
+    },
+    ...buildDataRowFormatRequests(sheetId, dataStartRow, dataEndRow, gpRowsData.map(g => g.gpName)),
+    ...buildTotalRowFormatRequests(sheetId, totalRowIdx),
+    ...buildGrandTotalRowFormatRequests(sheetId, newGrandTotalIdx),
+  ];
+
+  await batchUpdateSpreadsheet(batchRequests);
+
+  const valuesBatch: { range: string; values: any[][] }[] = [
+    {
+      range: `A${dataStartRow}:K${newGrandTotalIdx}`,
+      values: [...rowsToAdd, totalRowValues, grandRowValues],
+    },
+  ];
+
+  await batchUpdateValues(sheetTitle, valuesBatch);
   safeRevalidate();
   return { success: true };
 }
@@ -759,10 +983,10 @@ export async function updateSubmission(
     let deoName = data.name ? normalizeName(data.name) : (session?.name ? normalizeName(session.name) : '');
     let mobile = data.mobile ? data.mobile.trim() : (session?.mobile ? session.mobile.trim() : '');
 
-    // Live real-time sync with Google Sheet
+    // Live real-time sync with Google Sheet using fast cached users
     if (mobile) {
       try {
-        const liveUsers = await fetchUsersFromGoogleSheet();
+        const liveUsers = await getLiveUsersCached();
         const currentLive = liveUsers.find(u => u.mobile === mobile);
         if (currentLive) {
           if (currentLive.access === 'NO') {
@@ -856,7 +1080,6 @@ export async function updateSubmission(
     await updateSheetRow(originalSheetTitle, targetRowIdx, updatedRow);
     try {
       await adjustGpCellFontSize(originalSheetTitle, targetRowIdx, firstGp.gpName);
-      await formatDataRow(originalSheetTitle, targetRowIdx);
     } catch (_) {}
 
     // If more than 1 GP was included in the update, insert subsequent GPs into next rows
@@ -875,19 +1098,15 @@ export async function updateSubmission(
         gpData.wfhGp
       ]);
       await insertSheetRows(originalSheetTitle, targetRowIdx + 1, additionalRows);
-      for (let k = 0; k < additionalRows.length; k++) {
-        const nextRow = targetRowIdx + 1 + k;
-        try {
-          await adjustGpCellFontSize(originalSheetTitle, nextRow, gpRowsData[k + 1].gpName);
-          await formatDataRow(originalSheetTitle, nextRow);
-        } catch (_) {}
+      const sheetId = await getSheetId(originalSheetTitle);
+      await batchUpdateSpreadsheet(
+        buildDataRowFormatRequests(sheetId, targetRowIdx + 1, targetRowIdx + additionalRows.length, gpRowsData.slice(1).map(g => g.gpName))
+      );
+      try {
+        await syncSheetTotals(originalSheetTitle);
+      } catch (err) {
+        console.error(`Error syncing sheet totals for ${originalSheetTitle}:`, err);
       }
-    }
-
-    try {
-      await syncSheetTotals(originalSheetTitle);
-    } catch (err) {
-      console.error(`Error syncing sheet totals for ${originalSheetTitle}:`, err);
     }
 
     safeRevalidate();
@@ -1002,11 +1221,9 @@ export async function getSubmissions(query?: { name?: string; date?: string; rec
       if (submittedAt) {
         const ageMs = now - submittedAt;
         if (ageMs > THIRTY_MINUTES_MS) {
-          // More than 30 minutes old -> DO NOT SHOW
           return;
         }
       } else {
-        // Fallback for older rows without timestamp: only show if created today
         const todayStr = toDDMMYYYY(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
         if (toDDMMYYYY(date) !== todayStr) {
           return;
@@ -1156,10 +1373,18 @@ export async function getSubmission(id: string) {
   }
 }
 
+let knownDeoCache: { timestamp: number; names: string[] } | null = null;
+
 export async function getKnownDeoNames(): Promise<string[]> {
+  const now = Date.now();
+  if (knownDeoCache && (now - knownDeoCache.timestamp) < 60000) {
+    return knownDeoCache.names;
+  }
   try {
-    const entryRows = await getSheetValues('Entry', 'C3:C100');
-    const verifiedRows = await getSheetValues('Verified', 'C3:C100');
+    const [entryRows, verifiedRows] = await Promise.all([
+      getSheetValues('Entry', 'C3:C100'),
+      getSheetValues('Verified', 'C3:C100'),
+    ]);
     const names = new Set<string>();
 
     [...entryRows, ...verifiedRows].forEach(r => {
@@ -1169,7 +1394,9 @@ export async function getKnownDeoNames(): Promise<string[]> {
       }
     });
 
-    return Array.from(names).sort();
+    const result = Array.from(names).sort();
+    knownDeoCache = { timestamp: now, names: result };
+    return result;
   } catch {
     return [];
   }
